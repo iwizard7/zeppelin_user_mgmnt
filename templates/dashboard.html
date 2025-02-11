@@ -2,64 +2,129 @@
 <html>
 <head>
     <title>Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            display: inline-block;
+            text-align: left;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+        li {
+            margin: 5px 0;
+            padding: 5px;
+            background: #e7e7e7;
+            border-radius: 5px;
+        }
+        button {
+            padding: 5px 10px;
+            margin-top: 5px;
+            border: none;
+            background: #007bff;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        input, select {
+            padding: 5px;
+            margin: 5px;
+        }
+        .role-button {
+            margin-left: 10px;
+            padding: 3px 5px;
+            background: red;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .role-button:hover {
+            background: darkred;
+        }
+    </style>
 </head>
 <body>
-    <h1>Dashboard</h1>
-    <h2>Users</h2>
-    <ul>
-        {% for user, password in users.items() %}
-            <li>{{ user }}
-                (Groups: {{ user_roles.get(user, 'None') }})
-                <form action="/delete_user" method="post" style="display:inline;">
-                    <input type="hidden" name="username" value="{{ user }}">
-                    <button type="submit">Delete</button>
-                </form>
-            </li>
-        {% endfor %}
-    </ul>
-    <form action="/add_user" method="post">
-        <input type="text" name="username" placeholder="Username" required>
-        <input type="password" name="password" placeholder="Password" required>
-        <button type="submit">Add User</button>
-    </form>
-
-    <h2>Groups</h2>
-    <ul>
-        {% for group in groups.keys() %}
-            <li>{{ group }} <form action="/delete_group" method="post" style="display:inline;">
-                <input type="hidden" name="groupname" value="{{ group }}">
-                <button type="submit">Delete</button>
-            </form></li>
-        {% endfor %}
-    </ul>
-    <form action="/add_group" method="post">
-        <input type="text" name="groupname" placeholder="Group Name" required>
-        <button type="submit">Add Group</button>
-    </form>
-
-    <h2>Assign User to Group</h2>
-    <form action="/assign_user_group" method="post">
-        <select name="username" required>
-            {% for user in users.keys() %}
-                <option value="{{ user }}">{{ user }}</option>
+    <div class="container">
+        <h1>Dashboard</h1>
+        <h2>Users</h2>
+        <ul>
+            {% for user, roles in users.items() %}
+                <li>{{ user }}
+                    (Roles:
+                    {% for role in roles %}
+                        {{ role }}
+                        <form action="/unassign_user_role" method="post" style="display:inline;">
+                            <input type="hidden" name="username" value="{{ user }}">
+                            <input type="hidden" name="role" value="{{ role }}">
+                            <button type="submit" class="role-button">&times;</button>
+                        </form>
+                    {% endfor %})
+                    <form action="/delete_user" method="post" style="display:inline;">
+                        <input type="hidden" name="username" value="{{ user }}">
+                        <button type="submit">Delete</button>
+                    </form>
+                </li>
             {% endfor %}
-        </select>
-        <select name="groupname" required>
-            {% for group in groups.keys() %}
-                <option value="{{ group }}">{{ group }}</option>
+        </ul>
+        <form action="/add_user" method="post">
+            <input type="text" name="username" placeholder="Username" required>
+            <input type="password" name="password" placeholder="Password" required>
+            <button type="submit">Add User</button>
+        </form>
+
+        <h2>Roles</h2>
+        <ul>
+            {% for role in roles.keys() %}
+                <li>{{ role }}</li>
             {% endfor %}
-        </select>
-        <button type="submit">Assign</button>
-    </form>
+        </ul>
+        <form action="/add_role" method="post">
+            <input type="text" name="role_name" placeholder="New Role" required>
+            <button type="submit">Add Role</button>
+        </form>
 
-    <h2>Restart Zeppelin</h2>
-    <form action="/restart_zeppelin" method="post">
-        <button type="submit">Restart</button>
-    </form>
+        <h2>Assign Roles to User</h2>
+        <form action="/assign_user_role" method="post">
+            <select name="username" required>
+                {% for user in users.keys() %}
+                    <option value="{{ user }}">{{ user }}</option>
+                {% endfor %}
+            </select>
+            <select name="role" required>
+                {% for role in roles.keys() %}
+                    <option value="{{ role }}">{{ role }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit">Assign</button>
+        </form>
 
-    <h2>Logout</h2>
-    <form action="/logout" method="get">
-        <button type="submit">Logout</button>
-    </form>
+        <h2>Restart Zeppelin</h2>
+        <form action="/restart_zeppelin" method="post">
+            <button type="submit">Restart</button>
+        </form>
+
+        <h2>Logout</h2>
+        <form action="/logout" method="get">
+            <button type="submit">Logout</button>
+        </form>
+    </div>
 </body>
 </html>

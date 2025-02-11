@@ -1,143 +1,156 @@
-from flask import Flask, render_template, request, redirect, url_for
-from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user
-import configparser
+from flask import Flask, render_template, request, redirect, url_for, session
 import os
-import subprocess
 
 app = Flask(__name__)
-app.secret_key = 'supersecretkey'
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'login'
-
-SHIRO_FILE = 'shiro.ini'
-ZEPPELIN_SERVICE = 'zeppelin'
+app.secret_key = 'your_secret_key'
+shiro_ini_path = 'shiro.ini'
 
 
-class User(UserMixin):
-    def __init__(self, username):
-        self.id = username
+def read_shiro_ini():
+    users = {}
+    roles = {}
+    current_section = None
+
+    with open(shiro_ini_path, 'r') as file:
+        for line in file:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            if line.startswith('[') and line.endswith(']'):
+                current_section = line[1:-1]
+                continue
+
+            if current_section == 'users':
+                parts = line.split('=')
+                if len(parts) == 2:
+                    username, data = parts[0].strip(), parts[1].strip()
+                    data_parts = data.split(',')
+                    users[username] = {'password': data_parts[0].strip(), 'roles': [r.strip() for r in data_parts[1:]]}
+
+            elif current_section == 'roles':
+                parts = line.split('=')
+                if len(parts) == 2:
+                    role = parts[0].strip()
+                    roles[role] = parts[1].strip()
+
+    return users, roles
 
 
-@login_manager.user_loader
-def load_user(user_id):
-    return User(user_id)
+def write_shiro_ini(users, roles):
+    with open(shiro_ini_path, 'w') as file:
+        file.write('[users]\n')
+        for user, data in users.items():
+            file.write(f"{user} = {data['password']}, {', '.join(data['roles'])}\n")
 
-
-def load_shiro_config():
-    config = configparser.ConfigParser(allow_no_value=True)
-    config.read(SHIRO_FILE)
-    return config
-
-
-def save_shiro_config(config):
-    with open(SHIRO_FILE, 'w') as configfile:
-        config.write(configfile)
+        file.write('\n[roles]\n')
+        for role, perms in roles.items():
+            file.write(f"{role} = {perms}\n")
 
 
 def restart_zeppelin():
-    subprocess.run(['sudo', 'systemctl', 'restart', ZEPPELIN_SERVICE], check=True)
+    os.system('systemctl restart zeppelin')
 
 
-@app.route('/', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        config = load_shiro_config()
-
-        if config.has_section('users') and username in config['users'] and config['users'][username] == password:
-            user = User(username)
-            login_user(user)
-            return redirect(url_for('dashboard'))
-
+@app.route('/')
+def login_page():
     return render_template('login.html')
 
 
+@app.route('/login', methods=['POST'])
+def login():
+    username = request.form['username']
+    password = request.form['password']
+    users, _ = read_shiro_ini()
+    if username in users and users[username]['password'] == password:
+        session['username'] = username
+        return redirect(url_for('dashboard'))
+    return redirect(url_for('login_page'))
+
+
 @app.route('/dashboard')
-@login_required
 def dashboard():
-    config = load_shiro_config()
-    users = dict(config.items('users')) if config.has_section('users') else {}
-    groups = dict(config.items('groups')) if config.has_section('groups') else {}
-    user_roles = dict(config.items('roles')) if config.has_section('roles') else {}
-    return render_template('dashboard.html', users=users, groups=groups, user_roles=user_roles)
+    if 'username' not in session:
+        return redirect(url_for('login_page'))
+    users, roles = read_shiro_ini()
+    return render_template('dashboard.html', users={k: v['roles'] for k, v in users.items()}, roles=roles)
+
+
+@app.route('/logout')
+def logout():
+    session.pop('username', None)
+    return redirect(url_for('login_page'))
 
 
 @app.route('/add_user', methods=['POST'])
-@login_required
 def add_user():
+    if 'username' not in session:
+        return redirect(url_for('login_page'))
     username = request.form['username']
     password = request.form['password']
-    config = load_shiro_config()
-    if not config.has_section('users'):
-        config.add_section('users')
-    config.set('users', username, password)
-    save_shiro_config(config)
+    users, roles = read_shiro_ini()
+    if username not in users:
+        users[username] = {'password': password, 'roles': []}
+        write_shiro_ini(users, roles)
     return redirect(url_for('dashboard'))
 
 
 @app.route('/delete_user', methods=['POST'])
-@login_required
 def delete_user():
+    if 'username' not in session:
+        return redirect(url_for('login_page'))
     username = request.form['username']
-    config = load_shiro_config()
-    if config.has_section('users'):
-        config.remove_option('users', username)
-    if config.has_section('roles'):
-        config.remove_option('roles', username)
-    save_shiro_config(config)
+    users, roles = read_shiro_ini()
+    if username in users:
+        del users[username]
+        write_shiro_ini(users, roles)
     return redirect(url_for('dashboard'))
 
 
-@app.route('/add_group', methods=['POST'])
-@login_required
-def add_group():
-    groupname = request.form['groupname']
-    config = load_shiro_config()
-    if not config.has_section('groups'):
-        config.add_section('groups')
-    config.set('groups', groupname, '')
-    save_shiro_config(config)
-    return redirect(url_for('dashboard'))
-
-
-@app.route('/delete_group', methods=['POST'])
-@login_required
-def delete_group():
-    groupname = request.form['groupname']
-    config = load_shiro_config()
-    if config.has_section('groups'):
-        config.remove_option('groups', groupname)
-    save_shiro_config(config)
-    return redirect(url_for('dashboard'))
-
-
-@app.route('/assign_user_group', methods=['POST'])
-@login_required
-def assign_user_group():
+@app.route('/assign_user_role', methods=['POST'])
+def assign_user_role():
+    if 'username' not in session:
+        return redirect(url_for('login_page'))
     username = request.form['username']
-    groupname = request.form['groupname']
-    config = load_shiro_config()
-    if not config.has_section('roles'):
-        config.add_section('roles')
-    config.set('roles', username, groupname)
-    save_shiro_config(config)
+    role = request.form['role']
+    users, roles = read_shiro_ini()
+    if username in users and role in roles:
+        if role not in users[username]['roles']:
+            users[username]['roles'].append(role)
+            write_shiro_ini(users, roles)
+    return redirect(url_for('dashboard'))
+
+
+@app.route('/unassign_user_role', methods=['POST'])
+def unassign_user_role():
+    if 'username' not in session:
+        return redirect(url_for('login_page'))
+    username = request.form['username']
+    role = request.form['role']
+    users, roles = read_shiro_ini()
+    if username in users and role in users[username]['roles']:
+        users[username]['roles'].remove(role)
+        write_shiro_ini(users, roles)
+    return redirect(url_for('dashboard'))
+
+
+@app.route('/add_role', methods=['POST'])
+def add_role():
+    if 'username' not in session:
+        return redirect(url_for('login_page'))
+    role_name = request.form['role_name']
+    users, roles = read_shiro_ini()
+    if role_name not in roles:
+        roles[role_name] = '*'
+        write_shiro_ini(users, roles)
     return redirect(url_for('dashboard'))
 
 
 @app.route('/restart_zeppelin', methods=['POST'])
-@login_required
-def restart_service():
+def restart():
+    if 'username' not in session:
+        return redirect(url_for('login_page'))
     restart_zeppelin()
     return redirect(url_for('dashboard'))
-
-
-@app.route('/logout')
-@login_required
-def logout():
-    logout_user()
-    return redirect(url_for('login'))
 
 
 if __name__ == '__main__':
