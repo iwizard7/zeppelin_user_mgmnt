@@ -60,7 +60,7 @@ def write_shiro_ini(users, roles, sections):
 
 
 def restart_zeppelin():
-    os.system('systemctl restart zeppelin')
+    os.system('sudo systemctl restart zeppelin')
 
 
 @app.route('/')
