@@ -9,42 +9,54 @@ shiro_ini_path = 'shiro.ini'
 def read_shiro_ini():
     users = {}
     roles = {}
+    sections = {}
     current_section = None
 
-    with open(shiro_ini_path, 'r') as file:
-        for line in file:
-            line = line.strip()
-            if not line or line.startswith('#'):
-                continue
-            if line.startswith('[') and line.endswith(']'):
-                current_section = line[1:-1]
-                continue
+    with open(shiro_ini_path, 'r', encoding='utf-8') as file:
+        lines = file.readlines()
 
-            if current_section == 'users':
-                parts = line.split('=')
-                if len(parts) == 2:
-                    username, data = parts[0].strip(), parts[1].strip()
-                    data_parts = data.split(',')
-                    users[username] = {'password': data_parts[0].strip(), 'roles': [r.strip() for r in data_parts[1:]]}
+    for line in lines:
+        stripped_line = line.strip()
 
-            elif current_section == 'roles':
-                parts = line.split('=')
-                if len(parts) == 2:
-                    role = parts[0].strip()
-                    roles[role] = parts[1].strip()
+        if stripped_line.startswith('[') and stripped_line.endswith(']'):
+            current_section = stripped_line[1:-1]
+            sections[current_section] = []
 
-    return users, roles
+        if current_section:
+            sections[current_section].append(line)
+
+        if current_section == 'users':
+            parts = stripped_line.split('=')
+            if len(parts) == 2:
+                username, data = parts[0].strip(), parts[1].strip()
+                data_parts = [part.strip() for part in data.split(',') if part.strip()]
+                if data_parts:
+                    users[username] = {'password': data_parts[0], 'roles': data_parts[1:]}
+        elif current_section == 'roles':
+            parts = stripped_line.split('=')
+            if len(parts) == 2:
+                role = parts[0].strip()
+                roles[role] = parts[1].strip()
+
+    return users, roles, sections
 
 
-def write_shiro_ini(users, roles):
-    with open(shiro_ini_path, 'w') as file:
-        file.write('[users]\n')
-        for user, data in users.items():
-            file.write(f"{user} = {data['password']}, {', '.join(data['roles'])}\n")
-
-        file.write('\n[roles]\n')
-        for role, perms in roles.items():
-            file.write(f"{role} = {perms}\n")
+def write_shiro_ini(users, roles, sections):
+    with open(shiro_ini_path, 'w', encoding='utf-8') as file:
+        for section, lines in sections.items():
+            if section == 'users':
+                file.write('[users]\n')
+                for user, data in users.items():
+                    roles_str = ', '.join(data['roles']) if data['roles'] else ''
+                    file.write(f"{user} = {data['password']}{', ' + roles_str if roles_str else ''}\n")
+            elif section == 'roles':
+                file.write('[roles]\n')
+                for role, perms in roles.items():
+                    file.write(f"{role} = {perms}\n")
+            else:
+                if not file.tell() == 0:
+                    file.write('\n')
+                file.writelines(lines)
 
 
 def restart_zeppelin():
@@ -60,7 +72,7 @@ def login_page():
 def login():
     username = request.form['username']
     password = request.form['password']
-    users, _ = read_shiro_ini()
+    users, _, _ = read_shiro_ini()
     if username in users and users[username]['password'] == password:
         session['username'] = username
         return redirect(url_for('dashboard'))
@@ -71,7 +83,7 @@ def login():
 def dashboard():
     if 'username' not in session:
         return redirect(url_for('login_page'))
-    users, roles = read_shiro_ini()
+    users, roles, _ = read_shiro_ini()
     return render_template('dashboard.html', users={k: v['roles'] for k, v in users.items()}, roles=roles)
 
 
@@ -87,10 +99,10 @@ def add_user():
         return redirect(url_for('login_page'))
     username = request.form['username']
     password = request.form['password']
-    users, roles = read_shiro_ini()
+    users, roles, sections = read_shiro_ini()
     if username not in users:
         users[username] = {'password': password, 'roles': []}
-        write_shiro_ini(users, roles)
+        write_shiro_ini(users, roles, sections)
     return redirect(url_for('dashboard'))
 
 
@@ -99,10 +111,10 @@ def delete_user():
     if 'username' not in session:
         return redirect(url_for('login_page'))
     username = request.form['username']
-    users, roles = read_shiro_ini()
+    users, roles, sections = read_shiro_ini()
     if username in users:
         del users[username]
-        write_shiro_ini(users, roles)
+        write_shiro_ini(users, roles, sections)
     return redirect(url_for('dashboard'))
 
 
@@ -112,11 +124,11 @@ def assign_user_role():
         return redirect(url_for('login_page'))
     username = request.form['username']
     role = request.form['role']
-    users, roles = read_shiro_ini()
+    users, roles, sections = read_shiro_ini()
     if username in users and role in roles:
         if role not in users[username]['roles']:
             users[username]['roles'].append(role)
-            write_shiro_ini(users, roles)
+            write_shiro_ini(users, roles, sections)
     return redirect(url_for('dashboard'))
 
 
@@ -126,10 +138,10 @@ def unassign_user_role():
         return redirect(url_for('login_page'))
     username = request.form['username']
     role = request.form['role']
-    users, roles = read_shiro_ini()
+    users, roles, sections = read_shiro_ini()
     if username in users and role in users[username]['roles']:
         users[username]['roles'].remove(role)
-        write_shiro_ini(users, roles)
+        write_shiro_ini(users, roles, sections)
     return redirect(url_for('dashboard'))
 
 
@@ -138,10 +150,10 @@ def add_role():
     if 'username' not in session:
         return redirect(url_for('login_page'))
     role_name = request.form['role_name']
-    users, roles = read_shiro_ini()
+    users, roles, sections = read_shiro_ini()
     if role_name not in roles:
         roles[role_name] = '*'
-        write_shiro_ini(users, roles)
+        write_shiro_ini(users, roles, sections)
     return redirect(url_for('dashboard'))
 
 
