@@ -16,6 +16,12 @@ RUN apt-get update && apt-get upgrade -y && \
 RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --upgrade pip
 
+# Set the user to avoid permission issues
+RUN useradd -ms /bin/bash appuser
+RUN chown -R appuser:appuser /app
+USER appuser
+
+
 # Открываем порт для доступа
 EXPOSE 5000
 

@@ -9,3 +9,4 @@ services:
       - .:/app
       - /path/to/host/shiro.ini:/app/shiro.ini
     restart: always
+    user: "0:0"
