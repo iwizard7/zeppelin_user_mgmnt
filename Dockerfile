@@ -14,6 +14,7 @@ RUN apt-get update && apt-get upgrade -y && \
 
 # Устанавливаем зависимости
 RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip
 
 # Открываем порт для доступа
 EXPOSE 5000
