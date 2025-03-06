@@ -8,6 +8,15 @@ shiro_ini_path = 'shiro.ini'
 
 
 def read_shiro_ini():
+    """
+    Reads the shiro.ini file and parses its contents into users, roles, and sections.
+
+    Returns:
+        tuple: A tuple containing three dictionaries:
+            - users (dict): A dictionary of users with their passwords and roles.
+            - roles (dict): A dictionary of roles with their permissions.
+            - sections (dict): A dictionary of sections with their lines.
+    """
     users = {}
     roles = {}
     sections = {}
@@ -43,6 +52,14 @@ def read_shiro_ini():
 
 
 def write_shiro_ini(users, roles, sections):
+    """
+    Writes the users, roles, and sections back to the shiro.ini file.
+
+    Args:
+        users (dict): A dictionary of users with their passwords and roles.
+        roles (dict): A dictionary of roles with their permissions.
+        sections (dict): A dictionary of sections with their lines.
+    """
     with open(shiro_ini_path, 'w', encoding='utf-8') as file:
         for section, lines in sections.items():
             if section == 'users':
@@ -61,6 +78,9 @@ def write_shiro_ini(users, roles, sections):
 
 
 def restart_zeppelin():
+    """
+    Restarts the Zeppelin service by stopping it, waiting for 30 seconds, and then starting it again.
+    """
     os.system('sudo systemctl stop zeppelin')
     time.sleep(30)
     os.system('sudo systemctl start zeppelin')
@@ -68,11 +88,23 @@ def restart_zeppelin():
 
 @app.route('/')
 def login_page():
+    """
+    Renders the login page.
+
+    Returns:
+        str: The rendered HTML of the login page.
+    """
     return render_template('login.html')
 
 
 @app.route('/login', methods=['POST'])
 def login():
+    """
+    Handles the login process by verifying the username and password.
+
+    Returns:
+        Response: Redirects to the dashboard if login is successful, otherwise redirects to the login page.
+    """
     username = request.form['username']
     password = request.form['password']
     users, _, _ = read_shiro_ini()
@@ -84,6 +116,12 @@ def login():
 
 @app.route('/dashboard')
 def dashboard():
+    """
+    Renders the dashboard page if the user is logged in.
+
+    Returns:
+        str: The rendered HTML of the dashboard page.
+    """
     if 'username' not in session:
         return redirect(url_for('login_page'))
     users, roles, _ = read_shiro_ini()
@@ -92,12 +130,24 @@ def dashboard():
 
 @app.route('/logout')
 def logout():
+    """
+    Logs out the user by clearing the session.
+
+    Returns:
+        Response: Redirects to the login page.
+    """
     session.pop('username', None)
     return redirect(url_for('login_page'))
 
 
 @app.route('/add_user', methods=['POST'])
 def add_user():
+    """
+    Adds a new user to the shiro.ini file.
+
+    Returns:
+        Response: Redirects to the dashboard.
+    """
     if 'username' not in session:
         return redirect(url_for('login_page'))
     username = request.form['username']
@@ -111,6 +161,12 @@ def add_user():
 
 @app.route('/delete_user', methods=['POST'])
 def delete_user():
+    """
+    Deletes a user from the shiro.ini file.
+
+    Returns:
+        Response: Redirects to the dashboard.
+    """
     if 'username' not in session:
         return redirect(url_for('login_page'))
     username = request.form['username']
@@ -123,6 +179,12 @@ def delete_user():
 
 @app.route('/assign_user_role', methods=['POST'])
 def assign_user_role():
+    """
+    Assigns a role to a user in the shiro.ini file.
+
+    Returns:
+        Response: Redirects to the dashboard.
+    """
     if 'username' not in session:
         return redirect(url_for('login_page'))
     username = request.form['username']
@@ -137,6 +199,12 @@ def assign_user_role():
 
 @app.route('/unassign_user_role', methods=['POST'])
 def unassign_user_role():
+    """
+    Unassigns a role from a user in the shiro.ini file.
+
+    Returns:
+        Response: Redirects to the dashboard.
+    """
     if 'username' not in session:
         return redirect(url_for('login_page'))
     username = request.form['username']
@@ -150,6 +218,12 @@ def unassign_user_role():
 
 @app.route('/add_role', methods=['POST'])
 def add_role():
+    """
+    Adds a new role to the shiro.ini file.
+
+    Returns:
+        Response: Redirects to the dashboard.
+    """
     if 'username' not in session:
         return redirect(url_for('login_page'))
     role_name = request.form['role_name']
@@ -162,6 +236,12 @@ def add_role():
 
 @app.route('/restart_zeppelin', methods=['POST'])
 def restart():
+    """
+    Restarts the Zeppelin service.
+
+    Returns:
+        Response: Redirects to the dashboard.
+    """
     if 'username' not in session:
         return redirect(url_for('login_page'))
     restart_zeppelin()
@@ -169,4 +249,7 @@ def restart():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    """
+    Runs the Flask application.
+    """
+    app.run(host='0.0.0.0', port=8080, debug=False)
