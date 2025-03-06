@@ -4,10 +4,11 @@ FROM python:3.13-slim
 # Устанавливаем рабочую директорию внутри контейнера
 WORKDIR /app
 
-# Копируем файлы проекта в контейнер
+# Копируем файлы проекта в контейнер, исключая shiro.ini
 COPY . /app
+RUN rm -f /app/shiro.ini
 
-# Обновляем систему и libxml2
+# Обновляем систему и устанавливаем libxml2
 RUN apt-get update && apt-get upgrade -y && \
     apt-get install -y libxml2 && \
     rm -rf /var/lib/apt/lists/*
