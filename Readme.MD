@@ -67,9 +67,11 @@ role2 = *
 ```
 
 ## 🔄 Перезапуск Apache Zeppelin
-Кнопка **Restart Zeppelin** выполняет команду:
+Кнопка **Restart Zeppelin** выполняет:
 ```bash
-sudo systemctl restart zeppelin
+sudo systemctl stop zeppelin
+sleep(30)
+sudo systemctl start zeppelin
 ```
 ⚠️ Убедитесь, что ваш пользователь имеет права на выполнение этой команды.
 
