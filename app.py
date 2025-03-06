@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, session
 import os
+import time
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'
@@ -60,7 +61,9 @@ def write_shiro_ini(users, roles, sections):
 
 
 def restart_zeppelin():
-    os.system('sudo systemctl restart zeppelin')
+    os.system('sudo systemctl stop zeppelin')
+    time.sleep(30)
+    os.system('sudo systemctl start zeppelin')
 
 
 @app.route('/')
