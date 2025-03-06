@@ -6,7 +6,6 @@ WORKDIR /app
 
 # Копируем файлы проекта в контейнер, исключая shiro.ini
 COPY . /app
-RUN rm -f /app/shiro.ini
 
 # Обновляем систему и устанавливаем libxml2
 RUN apt-get update && apt-get upgrade -y && \
