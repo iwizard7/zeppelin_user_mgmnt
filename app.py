@@ -1,10 +1,69 @@
 from flask import Flask, render_template, request, redirect, url_for, session
 import os
 import time
+import logging
+from logging.handlers import RotatingFileHandler
+from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'
 shiro_ini_path = 'shiro.ini'
+
+# Настройка логирования с ротацией
+def setup_logging():
+    """Настраивает логирование с ротацией файлов"""
+    # Создаем директорию для логов если её нет
+    log_dir = 'logs'
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    
+    # Настраиваем RotatingFileHandler
+    # Максимальный размер файла: 10MB, количество backup файлов: 5
+    file_handler = RotatingFileHandler(
+        filename=os.path.join(log_dir, 'app.log'),
+        maxBytes=10*1024*1024,  # 10MB
+        backupCount=5,
+        encoding='utf-8'
+    )
+    
+    # Настраиваем консольный вывод
+    console_handler = logging.StreamHandler()
+    
+    # Устанавливаем формат логов
+    formatter = logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+    
+    # Настраиваем logger
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    
+    return logger
+
+# Инициализируем логирование
+logger = setup_logging()
+
+
+def log_user_action(action, username, details=None):
+    """
+    Логирует действия пользователей
+    
+    Args:
+        action (str): Тип действия
+        username (str): Имя пользователя
+        details (str): Дополнительные детали
+    """
+    client_ip = request.remote_addr if request else 'unknown'
+    log_message = f"User: {username}, Action: {action}, IP: {client_ip}"
+    if details:
+        log_message += f", Details: {details}"
+    logger.info(log_message)
 
 
 def read_shiro_ini():
@@ -110,7 +169,10 @@ def login():
     users, _, _ = read_shiro_ini()
     if username in users and users[username]['password'] == password:
         session['username'] = username
+        log_user_action('LOGIN_SUCCESS', username)
         return redirect(url_for('dashboard'))
+    else:
+        log_user_action('LOGIN_FAILED', username or 'unknown', f'Invalid credentials')
     return redirect(url_for('login_page'))
 
 
@@ -136,6 +198,8 @@ def logout():
     Returns:
         Response: Redirects to the login page.
     """
+    username = session.get('username', 'unknown')
+    log_user_action('LOGOUT', username)
     session.pop('username', None)
     return redirect(url_for('login_page'))
 
@@ -150,12 +214,16 @@ def add_user():
     """
     if 'username' not in session:
         return redirect(url_for('login_page'))
-    username = request.form['username']
+    new_username = request.form['username']
     password = request.form['password']
+    current_user = session['username']
     users, roles, sections = read_shiro_ini()
-    if username not in users:
-        users[username] = {'password': password, 'roles': []}
+    if new_username not in users:
+        users[new_username] = {'password': password, 'roles': []}
         write_shiro_ini(users, roles, sections)
+        log_user_action('ADD_USER', current_user, f'Added user: {new_username}')
+    else:
+        log_user_action('ADD_USER_FAILED', current_user, f'User already exists: {new_username}')
     return redirect(url_for('dashboard'))
 
 
@@ -169,11 +237,15 @@ def delete_user():
     """
     if 'username' not in session:
         return redirect(url_for('login_page'))
-    username = request.form['username']
+    target_username = request.form['username']
+    current_user = session['username']
     users, roles, sections = read_shiro_ini()
-    if username in users:
-        del users[username]
+    if target_username in users:
+        del users[target_username]
         write_shiro_ini(users, roles, sections)
+        log_user_action('DELETE_USER', current_user, f'Deleted user: {target_username}')
+    else:
+        log_user_action('DELETE_USER_FAILED', current_user, f'User not found: {target_username}')
     return redirect(url_for('dashboard'))
 
 
@@ -187,13 +259,19 @@ def assign_user_role():
     """
     if 'username' not in session:
         return redirect(url_for('login_page'))
-    username = request.form['username']
+    target_username = request.form['username']
     role = request.form['role']
+    current_user = session['username']
     users, roles, sections = read_shiro_ini()
-    if username in users and role in roles:
-        if role not in users[username]['roles']:
-            users[username]['roles'].append(role)
+    if target_username in users and role in roles:
+        if role not in users[target_username]['roles']:
+            users[target_username]['roles'].append(role)
             write_shiro_ini(users, roles, sections)
+            log_user_action('ASSIGN_ROLE', current_user, f'Assigned role "{role}" to user "{target_username}"')
+        else:
+            log_user_action('ASSIGN_ROLE_FAILED', current_user, f'Role "{role}" already assigned to user "{target_username}"')
+    else:
+        log_user_action('ASSIGN_ROLE_FAILED', current_user, f'Invalid user "{target_username}" or role "{role}"')
     return redirect(url_for('dashboard'))
 
 
@@ -207,12 +285,16 @@ def unassign_user_role():
     """
     if 'username' not in session:
         return redirect(url_for('login_page'))
-    username = request.form['username']
+    target_username = request.form['username']
     role = request.form['role']
+    current_user = session['username']
     users, roles, sections = read_shiro_ini()
-    if username in users and role in users[username]['roles']:
-        users[username]['roles'].remove(role)
+    if target_username in users and role in users[target_username]['roles']:
+        users[target_username]['roles'].remove(role)
         write_shiro_ini(users, roles, sections)
+        log_user_action('UNASSIGN_ROLE', current_user, f'Removed role "{role}" from user "{target_username}"')
+    else:
+        log_user_action('UNASSIGN_ROLE_FAILED', current_user, f'Role "{role}" not found for user "{target_username}"')
     return redirect(url_for('dashboard'))
 
 
@@ -227,10 +309,14 @@ def add_role():
     if 'username' not in session:
         return redirect(url_for('login_page'))
     role_name = request.form['role_name']
+    current_user = session['username']
     users, roles, sections = read_shiro_ini()
     if role_name not in roles:
         roles[role_name] = '*'
         write_shiro_ini(users, roles, sections)
+        log_user_action('ADD_ROLE', current_user, f'Added role: {role_name}')
+    else:
+        log_user_action('ADD_ROLE_FAILED', current_user, f'Role already exists: {role_name}')
     return redirect(url_for('dashboard'))
 
 
@@ -244,7 +330,13 @@ def restart():
     """
     if 'username' not in session:
         return redirect(url_for('login_page'))
-    restart_zeppelin()
+    current_user = session['username']
+    log_user_action('RESTART_ZEPPELIN', current_user, 'Initiated Zeppelin service restart')
+    try:
+        restart_zeppelin()
+        log_user_action('RESTART_ZEPPELIN_SUCCESS', current_user, 'Zeppelin service restarted successfully')
+    except Exception as e:
+        log_user_action('RESTART_ZEPPELIN_FAILED', current_user, f'Failed to restart Zeppelin: {str(e)}')
     return redirect(url_for('dashboard'))
 
 
