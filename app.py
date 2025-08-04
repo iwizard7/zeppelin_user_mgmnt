@@ -1,13 +1,76 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, flash
 import os
 import time
 import logging
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
+from functools import wraps
+import subprocess
+import platform
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'
 shiro_ini_path = 'shiro.ini'
+
+
+def get_system_info():
+    """
+    Определяет операционную систему и команды управления сервисами
+    
+    Returns:
+        dict: Информация о системе и командах
+    """
+    system = platform.system()
+    
+    if system == 'Darwin':  # macOS
+        return {
+            'os': 'macOS',
+            'service_manager': 'launchctl',
+            'demo_mode': True,
+            'commands': {
+                'status': ['launchctl', 'list', 'org.apache.zeppelin'],
+                'start': ['launchctl', 'start', 'org.apache.zeppelin'],
+                'stop': ['launchctl', 'stop', 'org.apache.zeppelin'],
+                'restart': ['launchctl', 'kickstart', '-k', 'system/org.apache.zeppelin']
+            }
+        }
+    elif system == 'Linux':
+        # Определяем дистрибутив Linux
+        try:
+            with open('/etc/os-release', 'r') as f:
+                os_release = f.read().lower()
+            
+            if 'centos' in os_release or 'rhel' in os_release or 'red hat' in os_release:
+                distro = 'CentOS/RHEL'
+            elif 'oracle' in os_release:
+                distro = 'Oracle Linux'
+            elif 'ubuntu' in os_release or 'debian' in os_release:
+                distro = 'Ubuntu/Debian'
+            else:
+                distro = 'Linux'
+        except:
+            distro = 'Linux'
+        
+        return {
+            'os': distro,
+            'service_manager': 'systemctl',
+            'demo_mode': False,
+            'commands': {
+                'status': ['sudo', 'systemctl', 'status', 'zeppelin'],
+                'is_active': ['sudo', 'systemctl', 'is-active', 'zeppelin'],
+                'is_enabled': ['sudo', 'systemctl', 'is-enabled', 'zeppelin'],
+                'start': ['sudo', 'systemctl', 'start', 'zeppelin'],
+                'stop': ['sudo', 'systemctl', 'stop', 'zeppelin'],
+                'restart': ['sudo', 'systemctl', 'restart', 'zeppelin']
+            }
+        }
+    else:
+        return {
+            'os': system,
+            'service_manager': 'unknown',
+            'demo_mode': True,
+            'commands': {}
+        }
 
 # Настройка логирования с ротацией
 def setup_logging():
@@ -50,6 +113,36 @@ def setup_logging():
 logger = setup_logging()
 
 
+def login_required(f):
+    """Декоратор для проверки авторизации"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'username' not in session:
+            flash('Необходимо войти в систему', 'error')
+            return redirect(url_for('login_page'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+def validate_input(data, field_name, min_length=1, max_length=50):
+    """Валидация входных данных"""
+    if not data or not data.strip():
+        return False, f'{field_name} не может быть пустым'
+    
+    data = data.strip()
+    if len(data) < min_length:
+        return False, f'{field_name} должно содержать минимум {min_length} символов'
+    
+    if len(data) > max_length:
+        return False, f'{field_name} не может содержать более {max_length} символов'
+    
+    # Проверка на недопустимые символы
+    if any(char in data for char in ['=', '[', ']', '\n', '\r']):
+        return False, f'{field_name} содержит недопустимые символы'
+    
+    return True, data
+
+
 def log_user_action(action, username, details=None):
     """
     Логирует действия пользователей
@@ -69,80 +162,413 @@ def log_user_action(action, username, details=None):
 def read_shiro_ini():
     """
     Reads the shiro.ini file and parses its contents into users, roles, and sections.
+    Preserves all sections and their original formatting.
 
     Returns:
         tuple: A tuple containing three dictionaries:
             - users (dict): A dictionary of users with their passwords and roles.
             - roles (dict): A dictionary of roles with their permissions.
-            - sections (dict): A dictionary of sections with their lines.
+            - sections (dict): A dictionary of sections with their original lines.
     """
     users = {}
     roles = {}
     sections = {}
     current_section = None
+    section_order = []  # Сохраняем порядок секций
 
-    with open(shiro_ini_path, 'r', encoding='utf-8') as file:
-        lines = file.readlines()
+    try:
+        with open(shiro_ini_path, 'r', encoding='utf-8') as file:
+            lines = file.readlines()
+    except FileNotFoundError:
+        logger.error(f"Файл {shiro_ini_path} не найден")
+        flash(f'Файл конфигурации {shiro_ini_path} не найден', 'error')
+        return users, roles, sections
+    except PermissionError:
+        logger.error(f"Нет прав доступа к файлу {shiro_ini_path}")
+        flash('Нет прав доступа к файлу конфигурации', 'error')
+        return users, roles, sections
+    except Exception as e:
+        logger.error(f"Ошибка чтения файла {shiro_ini_path}: {str(e)}")
+        flash('Ошибка чтения файла конфигурации', 'error')
+        return users, roles, sections
 
-    for line in lines:
+    # Сначала читаем все строки и определяем секции
+    for i, line in enumerate(lines):
         stripped_line = line.strip()
 
+        # Определяем начало новой секции
         if stripped_line.startswith('[') and stripped_line.endswith(']'):
             current_section = stripped_line[1:-1]
-            sections[current_section] = []
+            if current_section not in sections:
+                sections[current_section] = []
+                section_order.append(current_section)
 
+        # Добавляем строку в текущую секцию (включая заголовок секции)
         if current_section:
             sections[current_section].append(line)
+        else:
+            # Строки до первой секции (комментарии в начале файла)
+            if 'header' not in sections:
+                sections['header'] = []
+                section_order.insert(0, 'header')
+            sections['header'].append(line)
 
-        if current_section == 'users':
-            parts = stripped_line.split('=')
+        # Парсим пользователей только из секции [users]
+        if current_section == 'users' and '=' in stripped_line and not stripped_line.startswith('['):
+            parts = stripped_line.split('=', 1)  # Разделяем только по первому знаку =
             if len(parts) == 2:
                 username, data = parts[0].strip(), parts[1].strip()
                 data_parts = [part.strip() for part in data.split(',') if part.strip()]
                 if data_parts:
                     users[username] = {'password': data_parts[0], 'roles': data_parts[1:]}
-        elif current_section == 'roles':
-            parts = stripped_line.split('=')
+
+        # Парсим роли только из секции [roles]
+        elif current_section == 'roles' and '=' in stripped_line and not stripped_line.startswith('['):
+            parts = stripped_line.split('=', 1)  # Разделяем только по первому знаку =
             if len(parts) == 2:
                 role = parts[0].strip()
                 roles[role] = parts[1].strip()
 
+    # Сохраняем порядок секций
+    sections['_section_order'] = section_order
+    
+    logger.info(f"Прочитано пользователей: {len(users)}, ролей: {len(roles)}, секций: {len(section_order)}")
+    
     return users, roles, sections
 
 
 def write_shiro_ini(users, roles, sections):
     """
     Writes the users, roles, and sections back to the shiro.ini file.
+    Preserves all sections and their original formatting, only modifying [users] and [roles].
 
     Args:
         users (dict): A dictionary of users with their passwords and roles.
         roles (dict): A dictionary of roles with their permissions.
-        sections (dict): A dictionary of sections with their lines.
+        sections (dict): A dictionary of sections with their original lines.
+    
+    Returns:
+        bool: True if successful, False otherwise
     """
-    with open(shiro_ini_path, 'w', encoding='utf-8') as file:
-        for section, lines in sections.items():
-            if section == 'users':
-                file.write('[users]\n')
-                for user, data in users.items():
-                    roles_str = ', '.join(data['roles']) if data['roles'] else ''
-                    file.write(f"{user} = {data['password']}{', ' + roles_str if roles_str else ''}\n")
-            elif section == 'roles':
-                file.write('[roles]\n')
-                for role, perms in roles.items():
-                    file.write(f"{role} = {perms}\n")
+    try:
+        # Создаем резервную копию
+        backup_path = f"{shiro_ini_path}.backup"
+        if os.path.exists(shiro_ini_path):
+            with open(shiro_ini_path, 'r', encoding='utf-8') as src:
+                with open(backup_path, 'w', encoding='utf-8') as dst:
+                    dst.write(src.read())
+        
+        logger.info(f"Начинаем запись в {shiro_ini_path}")
+        logger.info(f"Пользователей для записи: {len(users)}, ролей: {len(roles)}")
+        
+        with open(shiro_ini_path, 'w', encoding='utf-8') as file:
+            # Получаем порядок секций
+            section_order = sections.get('_section_order', sections.keys())
+            
+            for section_name in section_order:
+                if section_name == '_section_order':
+                    continue
+                    
+                if section_name == 'users':
+                    # Перезаписываем секцию [users] с новыми данными
+                    file.write('[users]\n')
+                    for user, data in users.items():
+                        roles_str = ', '.join(data['roles']) if data['roles'] else ''
+                        file.write(f"{user} = {data['password']}{', ' + roles_str if roles_str else ''}\n")
+                    file.write('\n')  # Добавляем пустую строку после секции
+                    
+                elif section_name == 'roles':
+                    # Перезаписываем секцию [roles] с новыми данными
+                    file.write('[roles]\n')
+                    for role, perms in roles.items():
+                        file.write(f"{role} = {perms}\n")
+                    file.write('\n')  # Добавляем пустую строку после секции
+                    
+                else:
+                    # Сохраняем все остальные секции как есть
+                    if section_name in sections:
+                        lines = sections[section_name]
+                        # Проверяем, нужно ли добавить разделитель
+                        if file.tell() > 0 and lines:
+                            # Добавляем разделитель между секциями если нужно
+                            if not lines[0].startswith('\n') and not lines[0].startswith('['):
+                                file.write('\n')
+                        
+                        file.writelines(lines)
+        
+        return True
+        
+    except PermissionError:
+        logger.error(f"Нет прав записи в файл {shiro_ini_path}")
+        flash('Нет прав записи в файл конфигурации', 'error')
+        return False
+    except Exception as e:
+        logger.error(f"Ошибка записи в файл {shiro_ini_path}: {str(e)}")
+        logger.error(f"Тип ошибки: {type(e).__name__}")
+        flash(f'Ошибка записи в файл конфигурации: {str(e)}', 'error')
+        # Восстанавливаем из резервной копии
+        try:
+            backup_path = f"{shiro_ini_path}.backup"
+            if os.path.exists(backup_path):
+                logger.info("Восстанавливаем из резервной копии")
+                with open(backup_path, 'r', encoding='utf-8') as src:
+                    with open(shiro_ini_path, 'w', encoding='utf-8') as dst:
+                        dst.write(src.read())
+        except Exception as restore_error:
+            logger.error(f"Ошибка восстановления из резервной копии: {str(restore_error)}")
+        return False
+
+
+def check_zeppelin_status():
+    """
+    Проверяет статус сервиса Zeppelin для разных операционных систем
+    
+    Returns:
+        dict: Словарь с информацией о статусе сервиса
+    """
+    system_info = get_system_info()
+    
+    if system_info['demo_mode']:
+        # Демо режим для macOS и неподдерживаемых систем
+        return {
+            'status': 'demo',
+            'status_class': 'info',
+            'status_text': f'Демо режим ({system_info["os"]})',
+            'active': 'demo',
+            'enabled': 'N/A',
+            'uptime': 'N/A',
+            'pid': 'N/A',
+            'memory_usage': 'N/A',
+            'full_output': f'Демо режим для {system_info["os"]} - {system_info["service_manager"]} недоступен',
+            'error': None,
+            'os': system_info['os']
+        }
+    
+    try:
+        # Проверяем статус сервиса
+        status_cmd = system_info['commands']['status']
+        result = subprocess.run(
+            status_cmd,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        # Получаем детальную информацию для systemctl
+        active_status = 'unknown'
+        enabled_status = 'unknown'
+        
+        if 'is_active' in system_info['commands']:
+            is_active_result = subprocess.run(
+                system_info['commands']['is_active'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            active_status = is_active_result.stdout.strip()
+        
+        if 'is_enabled' in system_info['commands']:
+            is_enabled_result = subprocess.run(
+                system_info['commands']['is_enabled'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            enabled_status = is_enabled_result.stdout.strip()
+        
+        # Парсим вывод статуса
+        status_output = result.stdout
+        
+        # Определяем статус
+        if active_status == 'active':
+            status = 'running'
+            status_class = 'success'
+            status_text = 'Запущен'
+        elif active_status == 'inactive':
+            status = 'stopped'
+            status_class = 'danger'
+            status_text = 'Остановлен'
+        elif active_status == 'failed':
+            status = 'failed'
+            status_class = 'danger'
+            status_text = 'Ошибка'
+        else:
+            # Для систем без is-active, анализируем вывод status
+            if 'active (running)' in status_output.lower():
+                status = 'running'
+                status_class = 'success'
+                status_text = 'Запущен'
+            elif 'inactive' in status_output.lower() or 'stopped' in status_output.lower():
+                status = 'stopped'
+                status_class = 'danger'
+                status_text = 'Остановлен'
+            elif 'failed' in status_output.lower():
+                status = 'failed'
+                status_class = 'danger'
+                status_text = 'Ошибка'
             else:
-                if not file.tell() == 0:
-                    file.write('\n')
-                file.writelines(lines)
+                status = 'unknown'
+                status_class = 'warning'
+                status_text = 'Неизвестно'
+        
+        # Извлекаем время работы и PID из вывода
+        uptime = 'N/A'
+        pid = 'N/A'
+        memory_usage = 'N/A'
+        
+        for line in status_output.split('\n'):
+            if 'Active:' in line:
+                if 'since' in line:
+                    uptime = line.split('since')[1].strip()
+            elif 'Main PID:' in line:
+                pid_match = line.split('Main PID:')[1].strip().split()[0]
+                if pid_match.isdigit():
+                    pid = pid_match
+            elif 'Memory:' in line:
+                memory_usage = line.split('Memory:')[1].strip()
+        
+        return {
+            'status': status,
+            'status_class': status_class,
+            'status_text': status_text,
+            'active': active_status,
+            'enabled': enabled_status,
+            'uptime': uptime,
+            'pid': pid,
+            'memory_usage': memory_usage,
+            'full_output': status_output,
+            'error': None,
+            'os': system_info['os']
+        }
+        
+    except subprocess.TimeoutExpired:
+        logger.error("Таймаут при проверке статуса Zeppelin")
+        return {
+            'status': 'error',
+            'status_class': 'danger',
+            'status_text': 'Ошибка проверки',
+            'error': 'Таймаут команды',
+            'os': system_info['os']
+        }
+    except FileNotFoundError:
+        logger.error(f"Команда {system_info['service_manager']} не найдена")
+        return {
+            'status': 'error',
+            'status_class': 'danger',
+            'status_text': 'Ошибка системы',
+            'error': f'{system_info["service_manager"]} не найден',
+            'os': system_info['os']
+        }
+    except Exception as e:
+        logger.error(f"Ошибка при проверке статуса Zeppelin: {str(e)}")
+        return {
+            'status': 'error',
+            'status_class': 'danger',
+            'status_text': 'Ошибка',
+            'error': str(e),
+            'os': system_info['os']
+        }
+
+
+def execute_service_command(command_type):
+    """
+    Выполняет команду управления сервисом Zeppelin
+    
+    Args:
+        command_type (str): Тип команды ('start', 'stop', 'restart')
+    
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    system_info = get_system_info()
+    
+    if system_info['demo_mode']:
+        logger.info(f"Демо режим: {command_type} Zeppelin на {system_info['os']}")
+        time.sleep(2)  # Имитируем работу
+        return True, f"Демо режим: команда {command_type} выполнена"
+    
+    try:
+        if command_type == 'restart':
+            # Для перезапуска используем специальную команду или stop+start
+            if 'restart' in system_info['commands']:
+                result = subprocess.run(
+                    system_info['commands']['restart'],
+                    capture_output=True,
+                    text=True,
+                    timeout=90
+                )
+                if result.returncode == 0:
+                    return True, "Сервис успешно перезапущен"
+                else:
+                    return False, f"Ошибка перезапуска: {result.stderr}"
+            else:
+                # Останавливаем
+                result_stop = subprocess.run(
+                    system_info['commands']['stop'],
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+                
+                if result_stop.returncode != 0:
+                    return False, f"Ошибка остановки: {result_stop.stderr}"
+                
+                # Ждем
+                time.sleep(30)
+                
+                # Запускаем
+                result_start = subprocess.run(
+                    system_info['commands']['start'],
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+                
+                if result_start.returncode != 0:
+                    return False, f"Ошибка запуска: {result_start.stderr}"
+                
+                return True, "Сервис успешно перезапущен"
+        
+        else:
+            # Для start и stop
+            if command_type in system_info['commands']:
+                result = subprocess.run(
+                    system_info['commands'][command_type],
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+                
+                if result.returncode == 0:
+                    action_text = {'start': 'запущен', 'stop': 'остановлен'}
+                    return True, f"Сервис успешно {action_text.get(command_type, command_type)}"
+                else:
+                    return False, f"Ошибка {command_type}: {result.stderr}"
+            else:
+                return False, f"Команда {command_type} не поддерживается на {system_info['os']}"
+        
+    except subprocess.TimeoutExpired:
+        logger.error(f"Таймаут при выполнении команды {command_type}")
+        return False, "Таймаут выполнения команды"
+    except FileNotFoundError:
+        logger.error(f"Команда {system_info['service_manager']} не найдена")
+        return False, f"Менеджер сервисов {system_info['service_manager']} не найден"
+    except Exception as e:
+        logger.error(f"Неожиданная ошибка при {command_type} Zeppelin: {str(e)}")
+        return False, f"Неожиданная ошибка: {str(e)}"
 
 
 def restart_zeppelin():
     """
-    Restarts the Zeppelin service by stopping it, waiting for 30 seconds, and then starting it again.
+    Restarts the Zeppelin service.
+    
+    Returns:
+        bool: True if successful, False otherwise
     """
-    os.system('sudo systemctl stop zeppelin')
-    time.sleep(30)
-    os.system('sudo systemctl start zeppelin')
+    success, message = execute_service_command('restart')
+    if not success:
+        logger.error(f"Ошибка перезапуска Zeppelin: {message}")
+    return success
 
 
 @app.route('/')
@@ -177,6 +603,7 @@ def login():
 
 
 @app.route('/dashboard')
+@login_required
 def dashboard():
     """
     Renders the dashboard page if the user is logged in.
@@ -184,10 +611,12 @@ def dashboard():
     Returns:
         str: The rendered HTML of the dashboard page.
     """
-    if 'username' not in session:
-        return redirect(url_for('login_page'))
     users, roles, _ = read_shiro_ini()
-    return render_template('dashboard.html', users={k: v['roles'] for k, v in users.items()}, roles=roles)
+    zeppelin_status = check_zeppelin_status()
+    return render_template('dashboard.html', 
+                         users={k: v['roles'] for k, v in users.items()}, 
+                         roles=roles,
+                         zeppelin_status=zeppelin_status)
 
 
 @app.route('/logout')
@@ -205,6 +634,7 @@ def logout():
 
 
 @app.route('/add_user', methods=['POST'])
+@login_required
 def add_user():
     """
     Adds a new user to the shiro.ini file.
@@ -212,22 +642,39 @@ def add_user():
     Returns:
         Response: Redirects to the dashboard.
     """
-    if 'username' not in session:
-        return redirect(url_for('login_page'))
-    new_username = request.form['username']
-    password = request.form['password']
+    new_username = request.form.get('username', '').strip()
+    password = request.form.get('password', '').strip()
     current_user = session['username']
+    
+    # Валидация входных данных
+    valid_username, username_msg = validate_input(new_username, 'Имя пользователя', 3, 30)
+    if not valid_username:
+        flash(username_msg, 'error')
+        return redirect(url_for('dashboard'))
+    
+    valid_password, password_msg = validate_input(password, 'Пароль', 3, 50)
+    if not valid_password:
+        flash(password_msg, 'error')
+        return redirect(url_for('dashboard'))
+    
     users, roles, sections = read_shiro_ini()
+    
     if new_username not in users:
         users[new_username] = {'password': password, 'roles': []}
-        write_shiro_ini(users, roles, sections)
-        log_user_action('ADD_USER', current_user, f'Added user: {new_username}')
+        if write_shiro_ini(users, roles, sections):
+            flash(f'Пользователь {new_username} успешно добавлен', 'success')
+            log_user_action('ADD_USER', current_user, f'Added user: {new_username}')
+        else:
+            log_user_action('ADD_USER_FAILED', current_user, f'Failed to write user: {new_username}')
     else:
+        flash(f'Пользователь {new_username} уже существует', 'warning')
         log_user_action('ADD_USER_FAILED', current_user, f'User already exists: {new_username}')
+    
     return redirect(url_for('dashboard'))
 
 
 @app.route('/delete_user', methods=['POST'])
+@login_required
 def delete_user():
     """
     Deletes a user from the shiro.ini file.
@@ -235,21 +682,36 @@ def delete_user():
     Returns:
         Response: Redirects to the dashboard.
     """
-    if 'username' not in session:
-        return redirect(url_for('login_page'))
-    target_username = request.form['username']
+    target_username = request.form.get('username', '').strip()
     current_user = session['username']
+    
+    if not target_username:
+        flash('Не выбран пользователь для удаления', 'error')
+        return redirect(url_for('dashboard'))
+    
+    # Защита от удаления самого себя
+    if target_username == current_user:
+        flash('Нельзя удалить самого себя', 'error')
+        return redirect(url_for('dashboard'))
+    
     users, roles, sections = read_shiro_ini()
+    
     if target_username in users:
         del users[target_username]
-        write_shiro_ini(users, roles, sections)
-        log_user_action('DELETE_USER', current_user, f'Deleted user: {target_username}')
+        if write_shiro_ini(users, roles, sections):
+            flash(f'Пользователь {target_username} успешно удален', 'success')
+            log_user_action('DELETE_USER', current_user, f'Deleted user: {target_username}')
+        else:
+            log_user_action('DELETE_USER_FAILED', current_user, f'Failed to delete user: {target_username}')
     else:
+        flash(f'Пользователь {target_username} не найден', 'warning')
         log_user_action('DELETE_USER_FAILED', current_user, f'User not found: {target_username}')
+    
     return redirect(url_for('dashboard'))
 
 
 @app.route('/assign_user_role', methods=['POST'])
+@login_required
 def assign_user_role():
     """
     Assigns a role to a user in the shiro.ini file.
@@ -257,25 +719,36 @@ def assign_user_role():
     Returns:
         Response: Redirects to the dashboard.
     """
-    if 'username' not in session:
-        return redirect(url_for('login_page'))
-    target_username = request.form['username']
-    role = request.form['role']
+    target_username = request.form.get('username', '').strip()
+    role = request.form.get('role', '').strip()
     current_user = session['username']
+    
+    if not target_username or not role:
+        flash('Не выбран пользователь или роль', 'error')
+        return redirect(url_for('dashboard'))
+    
     users, roles, sections = read_shiro_ini()
+    
     if target_username in users and role in roles:
         if role not in users[target_username]['roles']:
             users[target_username]['roles'].append(role)
-            write_shiro_ini(users, roles, sections)
-            log_user_action('ASSIGN_ROLE', current_user, f'Assigned role "{role}" to user "{target_username}"')
+            if write_shiro_ini(users, roles, sections):
+                flash(f'Роль "{role}" назначена пользователю "{target_username}"', 'success')
+                log_user_action('ASSIGN_ROLE', current_user, f'Assigned role "{role}" to user "{target_username}"')
+            else:
+                log_user_action('ASSIGN_ROLE_FAILED', current_user, f'Failed to assign role "{role}" to user "{target_username}"')
         else:
+            flash(f'Роль "{role}" уже назначена пользователю "{target_username}"', 'warning')
             log_user_action('ASSIGN_ROLE_FAILED', current_user, f'Role "{role}" already assigned to user "{target_username}"')
     else:
+        flash('Неверный пользователь или роль', 'error')
         log_user_action('ASSIGN_ROLE_FAILED', current_user, f'Invalid user "{target_username}" or role "{role}"')
+    
     return redirect(url_for('dashboard'))
 
 
 @app.route('/unassign_user_role', methods=['POST'])
+@login_required
 def unassign_user_role():
     """
     Unassigns a role from a user in the shiro.ini file.
@@ -283,22 +756,32 @@ def unassign_user_role():
     Returns:
         Response: Redirects to the dashboard.
     """
-    if 'username' not in session:
-        return redirect(url_for('login_page'))
-    target_username = request.form['username']
-    role = request.form['role']
+    target_username = request.form.get('username', '').strip()
+    role = request.form.get('role', '').strip()
     current_user = session['username']
+    
+    if not target_username or not role:
+        flash('Не выбран пользователь или роль', 'error')
+        return redirect(url_for('dashboard'))
+    
     users, roles, sections = read_shiro_ini()
+    
     if target_username in users and role in users[target_username]['roles']:
         users[target_username]['roles'].remove(role)
-        write_shiro_ini(users, roles, sections)
-        log_user_action('UNASSIGN_ROLE', current_user, f'Removed role "{role}" from user "{target_username}"')
+        if write_shiro_ini(users, roles, sections):
+            flash(f'Роль "{role}" снята с пользователя "{target_username}"', 'success')
+            log_user_action('UNASSIGN_ROLE', current_user, f'Removed role "{role}" from user "{target_username}"')
+        else:
+            log_user_action('UNASSIGN_ROLE_FAILED', current_user, f'Failed to remove role "{role}" from user "{target_username}"')
     else:
+        flash(f'Роль "{role}" не найдена у пользователя "{target_username}"', 'warning')
         log_user_action('UNASSIGN_ROLE_FAILED', current_user, f'Role "{role}" not found for user "{target_username}"')
+    
     return redirect(url_for('dashboard'))
 
 
 @app.route('/add_role', methods=['POST'])
+@login_required
 def add_role():
     """
     Adds a new role to the shiro.ini file.
@@ -306,21 +789,99 @@ def add_role():
     Returns:
         Response: Redirects to the dashboard.
     """
-    if 'username' not in session:
-        return redirect(url_for('login_page'))
-    role_name = request.form['role_name']
+    role_name = request.form.get('role_name', '').strip()
     current_user = session['username']
+    
+    # Валидация входных данных
+    valid_role, role_msg = validate_input(role_name, 'Название роли', 2, 30)
+    if not valid_role:
+        flash(role_msg, 'error')
+        return redirect(url_for('dashboard'))
+    
     users, roles, sections = read_shiro_ini()
+    
     if role_name not in roles:
         roles[role_name] = '*'
-        write_shiro_ini(users, roles, sections)
-        log_user_action('ADD_ROLE', current_user, f'Added role: {role_name}')
+        if write_shiro_ini(users, roles, sections):
+            flash(f'Роль "{role_name}" успешно добавлена', 'success')
+            log_user_action('ADD_ROLE', current_user, f'Added role: {role_name}')
+        else:
+            log_user_action('ADD_ROLE_FAILED', current_user, f'Failed to add role: {role_name}')
     else:
+        flash(f'Роль "{role_name}" уже существует', 'warning')
         log_user_action('ADD_ROLE_FAILED', current_user, f'Role already exists: {role_name}')
+    
+    return redirect(url_for('dashboard'))
+
+
+@app.route('/check_zeppelin_status')
+@login_required
+def check_status():
+    """
+    Проверяет статус сервиса Zeppelin и возвращает JSON
+    
+    Returns:
+        JSON: Статус сервиса Zeppelin
+    """
+    from flask import jsonify
+    
+    current_user = session['username']
+    log_user_action('CHECK_ZEPPELIN_STATUS', current_user, 'Checked Zeppelin service status')
+    
+    status = check_zeppelin_status()
+    return jsonify(status)
+
+
+@app.route('/start_zeppelin', methods=['POST'])
+@login_required
+def start_zeppelin():
+    """
+    Запускает сервис Zeppelin
+    
+    Returns:
+        Response: Redirects to the dashboard.
+    """
+    current_user = session['username']
+    log_user_action('START_ZEPPELIN', current_user, 'Initiated Zeppelin service start')
+    
+    success, message = execute_service_command('start')
+    
+    if success:
+        flash(f'Сервис Zeppelin: {message}', 'success')
+        log_user_action('START_ZEPPELIN_SUCCESS', current_user, message)
+    else:
+        flash(f'Ошибка запуска Zeppelin: {message}', 'error')
+        log_user_action('START_ZEPPELIN_FAILED', current_user, message)
+    
+    return redirect(url_for('dashboard'))
+
+
+@app.route('/stop_zeppelin', methods=['POST'])
+@login_required
+def stop_zeppelin():
+    """
+    Останавливает сервис Zeppelin
+    
+    Returns:
+        Response: Redirects to the dashboard.
+    """
+    current_user = session['username']
+    log_user_action('STOP_ZEPPELIN', current_user, 'Initiated Zeppelin service stop')
+    
+    success, message = execute_service_command('stop')
+    
+    if success:
+        flash(f'Сервис Zeppelin: {message}', 'success')
+        log_user_action('STOP_ZEPPELIN_SUCCESS', current_user, message)
+    else:
+        flash(f'Ошибка остановки Zeppelin: {message}', 'error')
+        log_user_action('STOP_ZEPPELIN_FAILED', current_user, message)
+    
     return redirect(url_for('dashboard'))
 
 
 @app.route('/restart_zeppelin', methods=['POST'])
+@login_required
 def restart():
     """
     Restarts the Zeppelin service.
@@ -328,15 +889,18 @@ def restart():
     Returns:
         Response: Redirects to the dashboard.
     """
-    if 'username' not in session:
-        return redirect(url_for('login_page'))
     current_user = session['username']
     log_user_action('RESTART_ZEPPELIN', current_user, 'Initiated Zeppelin service restart')
-    try:
-        restart_zeppelin()
-        log_user_action('RESTART_ZEPPELIN_SUCCESS', current_user, 'Zeppelin service restarted successfully')
-    except Exception as e:
-        log_user_action('RESTART_ZEPPELIN_FAILED', current_user, f'Failed to restart Zeppelin: {str(e)}')
+    
+    success, message = execute_service_command('restart')
+    
+    if success:
+        flash(f'Сервис Zeppelin: {message}', 'success')
+        log_user_action('RESTART_ZEPPELIN_SUCCESS', current_user, message)
+    else:
+        flash(f'Ошибка перезапуска Zeppelin: {message}', 'error')
+        log_user_action('RESTART_ZEPPELIN_FAILED', current_user, message)
+    
     return redirect(url_for('dashboard'))
 
 
@@ -344,4 +908,4 @@ if __name__ == '__main__':
     """
     Runs the Flask application.
     """
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=5003, debug=False)
