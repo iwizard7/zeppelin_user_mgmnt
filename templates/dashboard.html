@@ -89,6 +89,9 @@
                             {% if zeppelin_status.enabled %}
                             <p class="mb-1"><strong>Автозапуск:</strong> {{ zeppelin_status.enabled }}</p>
                             {% endif %}
+                            {% if zeppelin_status.service_manager %}
+                            <p class="mb-1"><strong>Управление:</strong> {{ zeppelin_status.service_manager }}</p>
+                            {% endif %}
                             {% if zeppelin_status.error %}
                             <div class="alert alert-danger mt-2">{{ zeppelin_status.error }}</div>
                             {% endif %}
@@ -240,6 +243,10 @@
 
             if (status.enabled) {
                 html += `<p class="mb-1"><strong>Автозапуск:</strong> ${status.enabled}</p>`;
+            }
+            
+            if (status.service_manager) {
+                html += `<p class="mb-1"><strong>Управление:</strong> ${status.service_manager}</p>`;
             }
 
             if (status.error) {

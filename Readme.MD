@@ -63,11 +63,25 @@ pipx install flask
 
 ### 3️⃣ Настройка прав доступа
 
-#### Для Linux систем:
+#### Для Linux систем с systemctl:
 Убедитесь, что пользователь может управлять сервисом Zeppelin:
 ```bash
 # Добавьте в /etc/sudoers.d/zeppelin-mgmt:
 your_username ALL=(ALL) NOPASSWD: /bin/systemctl start zeppelin, /bin/systemctl stop zeppelin, /bin/systemctl restart zeppelin, /bin/systemctl status zeppelin, /bin/systemctl is-active zeppelin, /bin/systemctl is-enabled zeppelin
+```
+
+#### Для Linux систем с zeppelin-daemon.sh:
+Убедитесь, что пользователь может выполнять скрипт:
+```bash
+# Установите переменную окружения ZEPPELIN_HOME
+export ZEPPELIN_HOME=/opt/zeppelin
+
+# Или убедитесь, что скрипт доступен по стандартным путям:
+ls -la /opt/zeppelin/bin/zeppelin-daemon.sh
+ls -la /usr/local/zeppelin/bin/zeppelin-daemon.sh
+
+# Проверьте права на выполнение
+chmod +x $ZEPPELIN_HOME/bin/zeppelin-daemon.sh
 ```
 
 #### Для macOS:
@@ -151,11 +165,26 @@ securityManager.sessionManager = $sessionManager
 
 ## 📊 Мониторинг и управление Apache Zeppelin
 
-### Поддерживаемые операционные системы
-- **🐧 CentOS/RHEL**: systemctl управление сервисами
-- **🔶 Oracle Linux**: systemctl управление сервисами  
-- **🟠 Ubuntu/Debian**: systemctl управление сервисами
+### Поддерживаемые операционные системы и способы запуска Zeppelin
+- **🐧 CentOS/RHEL**: 
+  - systemctl управление сервисами
+  - zeppelin-daemon.sh скрипт
+- **🔶 Oracle Linux**: 
+  - systemctl управление сервисами
+  - zeppelin-daemon.sh скрипт
+- **🟠 Ubuntu/Debian**: 
+  - systemctl управление сервисами
+  - zeppelin-daemon.sh скрипт
 - **🍎 macOS**: демо-режим (launchctl команды готовы, но работают в демо-режиме)
+
+### Автоматическое определение способа запуска
+Приложение автоматически определяет, как запущен Zeppelin:
+1. **Systemd сервис** - если найден `zeppelin.service`
+2. **Daemon скрипт** - если найден `zeppelin-daemon.sh` в стандартных путях:
+   - `/opt/zeppelin/bin/zeppelin-daemon.sh`
+   - `/usr/local/zeppelin/bin/zeppelin-daemon.sh`
+   - `$ZEPPELIN_HOME/bin/zeppelin-daemon.sh`
+   - `./bin/zeppelin-daemon.sh`
 
 ### Статус сервиса
 Приложение предоставляет детальную информацию о состоянии Zeppelin:
@@ -170,15 +199,23 @@ securityManager.sessionManager = $sessionManager
 #### Linux (systemctl):
 - **▶️ Запуск**: `sudo systemctl start zeppelin`
 - **⏹️ Остановка**: `sudo systemctl stop zeppelin`
-- **⚡ Перезапуск**: `sudo systemctl restart zeppelin` или stop → wait → start
+- **⚡ Перезапуск**: `sudo systemctl restart zeppelin`
 - **🔄 Автообновление**: Статус обновляется каждые 30 секунд
+
+#### Linux (zeppelin-daemon.sh):
+- **▶️ Запуск**: `$ZEPPELIN_HOME/bin/zeppelin-daemon.sh start`
+- **⏹️ Остановка**: `$ZEPPELIN_HOME/bin/zeppelin-daemon.sh stop`
+- **⚡ Перезапуск**: `$ZEPPELIN_HOME/bin/zeppelin-daemon.sh restart`
+- **📊 Статус**: `$ZEPPELIN_HOME/bin/zeppelin-daemon.sh status`
 
 #### macOS (демо-режим):
 - **▶️ Запуск**: Демо-команда (готов launchctl start)
 - **⏹️ Остановка**: Демо-команда (готов launchctl stop)
 - **⚡ Перезапуск**: Демо-команда (готов launchctl kickstart)
 
-⚠️ **Требования для Linux**: Убедитесь, что пользователь имеет права sudo для управления systemctl.
+⚠️ **Требования**:
+- **Для systemctl**: sudo права для управления systemctl
+- **Для daemon**: права на выполнение скрипта zeppelin-daemon.sh
 
 ## 📝 Система логирования
 
@@ -336,6 +373,23 @@ lsof -i :5003
 sudo systemctl status zeppelin
 
 # Добавьте права в sudoers (см. раздел "Настройка прав доступа")
+```
+
+### Проблемы с zeppelin-daemon.sh
+Если скрипт не найден или не работает:
+```bash
+# Проверьте наличие скрипта
+find /opt /usr/local -name "zeppelin-daemon.sh" 2>/dev/null
+
+# Установите ZEPPELIN_HOME
+export ZEPPELIN_HOME=/path/to/your/zeppelin
+echo 'export ZEPPELIN_HOME=/path/to/your/zeppelin' >> ~/.bashrc
+
+# Проверьте права на выполнение
+chmod +x $ZEPPELIN_HOME/bin/zeppelin-daemon.sh
+
+# Проверьте статус вручную
+$ZEPPELIN_HOME/bin/zeppelin-daemon.sh status
 ```
 
 ### Файл shiro.ini не найден

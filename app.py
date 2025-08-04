@@ -13,6 +13,47 @@ app.secret_key = 'your_secret_key'
 shiro_ini_path = 'shiro.ini'
 
 
+def detect_zeppelin_installation():
+    """
+    Определяет способ установки и запуска Zeppelin
+    
+    Returns:
+        dict: Информация о способе запуска Zeppelin
+    """
+    # Проверяем наличие systemd сервиса
+    try:
+        result = subprocess.run(['systemctl', 'list-unit-files', 'zeppelin.service'], 
+                              capture_output=True, text=True, timeout=5)
+        if result.returncode == 0 and 'zeppelin.service' in result.stdout:
+            return {'type': 'systemd', 'available': True}
+    except:
+        pass
+    
+    # Проверяем наличие zeppelin-daemon.sh
+    common_paths = [
+        '/opt/zeppelin/bin/zeppelin-daemon.sh',
+        '/usr/local/zeppelin/bin/zeppelin-daemon.sh',
+        '/home/*/zeppelin*/bin/zeppelin-daemon.sh',
+        './bin/zeppelin-daemon.sh',
+        '../zeppelin/bin/zeppelin-daemon.sh'
+    ]
+    
+    import glob
+    for path_pattern in common_paths:
+        matches = glob.glob(path_pattern)
+        if matches:
+            return {'type': 'daemon', 'available': True, 'path': matches[0]}
+    
+    # Проверяем переменную окружения ZEPPELIN_HOME
+    zeppelin_home = os.environ.get('ZEPPELIN_HOME')
+    if zeppelin_home:
+        daemon_path = os.path.join(zeppelin_home, 'bin', 'zeppelin-daemon.sh')
+        if os.path.exists(daemon_path):
+            return {'type': 'daemon', 'available': True, 'path': daemon_path}
+    
+    return {'type': 'unknown', 'available': False}
+
+
 def get_system_info():
     """
     Определяет операционную систему и команды управления сервисами
@@ -21,12 +62,14 @@ def get_system_info():
         dict: Информация о системе и командах
     """
     system = platform.system()
+    zeppelin_info = detect_zeppelin_installation()
     
     if system == 'Darwin':  # macOS
         return {
             'os': 'macOS',
             'service_manager': 'launchctl',
             'demo_mode': True,
+            'zeppelin_type': 'demo',
             'commands': {
                 'status': ['launchctl', 'list', 'org.apache.zeppelin'],
                 'start': ['launchctl', 'start', 'org.apache.zeppelin'],
@@ -51,24 +94,59 @@ def get_system_info():
         except:
             distro = 'Linux'
         
-        return {
-            'os': distro,
-            'service_manager': 'systemctl',
-            'demo_mode': False,
-            'commands': {
-                'status': ['sudo', 'systemctl', 'status', 'zeppelin'],
-                'is_active': ['sudo', 'systemctl', 'is-active', 'zeppelin'],
-                'is_enabled': ['sudo', 'systemctl', 'is-enabled', 'zeppelin'],
-                'start': ['sudo', 'systemctl', 'start', 'zeppelin'],
-                'stop': ['sudo', 'systemctl', 'stop', 'zeppelin'],
-                'restart': ['sudo', 'systemctl', 'restart', 'zeppelin']
+        # Выбираем команды в зависимости от способа установки Zeppelin
+        if zeppelin_info['type'] == 'systemd':
+            return {
+                'os': distro,
+                'service_manager': 'systemctl',
+                'demo_mode': False,
+                'zeppelin_type': 'systemd',
+                'commands': {
+                    'status': ['sudo', 'systemctl', 'status', 'zeppelin'],
+                    'is_active': ['sudo', 'systemctl', 'is-active', 'zeppelin'],
+                    'is_enabled': ['sudo', 'systemctl', 'is-enabled', 'zeppelin'],
+                    'start': ['sudo', 'systemctl', 'start', 'zeppelin'],
+                    'stop': ['sudo', 'systemctl', 'stop', 'zeppelin'],
+                    'restart': ['sudo', 'systemctl', 'restart', 'zeppelin']
+                }
             }
-        }
+        elif zeppelin_info['type'] == 'daemon':
+            daemon_path = zeppelin_info['path']
+            return {
+                'os': distro,
+                'service_manager': 'zeppelin-daemon.sh',
+                'demo_mode': False,
+                'zeppelin_type': 'daemon',
+                'daemon_path': daemon_path,
+                'commands': {
+                    'status': [daemon_path, 'status'],
+                    'start': [daemon_path, 'start'],
+                    'stop': [daemon_path, 'stop'],
+                    'restart': [daemon_path, 'restart']
+                }
+            }
+        else:
+            # Fallback к systemctl если daemon не найден
+            return {
+                'os': distro,
+                'service_manager': 'systemctl',
+                'demo_mode': False,
+                'zeppelin_type': 'systemd',
+                'commands': {
+                    'status': ['sudo', 'systemctl', 'status', 'zeppelin'],
+                    'is_active': ['sudo', 'systemctl', 'is-active', 'zeppelin'],
+                    'is_enabled': ['sudo', 'systemctl', 'is-enabled', 'zeppelin'],
+                    'start': ['sudo', 'systemctl', 'start', 'zeppelin'],
+                    'stop': ['sudo', 'systemctl', 'stop', 'zeppelin'],
+                    'restart': ['sudo', 'systemctl', 'restart', 'zeppelin']
+                }
+            }
     else:
         return {
             'os': system,
             'service_manager': 'unknown',
             'demo_mode': True,
+            'zeppelin_type': 'unknown',
             'commands': {}
         }
 
@@ -354,62 +432,99 @@ def check_zeppelin_status():
             timeout=30
         )
         
-        # Получаем детальную информацию для systemctl
+        # Получаем детальную информацию в зависимости от типа управления
         active_status = 'unknown'
         enabled_status = 'unknown'
-        
-        if 'is_active' in system_info['commands']:
-            is_active_result = subprocess.run(
-                system_info['commands']['is_active'],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            active_status = is_active_result.stdout.strip()
-        
-        if 'is_enabled' in system_info['commands']:
-            is_enabled_result = subprocess.run(
-                system_info['commands']['is_enabled'],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            enabled_status = is_enabled_result.stdout.strip()
-        
-        # Парсим вывод статуса
         status_output = result.stdout
         
-        # Определяем статус
-        if active_status == 'active':
-            status = 'running'
-            status_class = 'success'
-            status_text = 'Запущен'
-        elif active_status == 'inactive':
-            status = 'stopped'
-            status_class = 'danger'
-            status_text = 'Остановлен'
-        elif active_status == 'failed':
-            status = 'failed'
-            status_class = 'danger'
-            status_text = 'Ошибка'
-        else:
-            # Для систем без is-active, анализируем вывод status
-            if 'active (running)' in status_output.lower():
+        if system_info['zeppelin_type'] == 'systemd':
+            # Для systemctl получаем дополнительную информацию
+            if 'is_active' in system_info['commands']:
+                is_active_result = subprocess.run(
+                    system_info['commands']['is_active'],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                active_status = is_active_result.stdout.strip()
+            
+            if 'is_enabled' in system_info['commands']:
+                is_enabled_result = subprocess.run(
+                    system_info['commands']['is_enabled'],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                enabled_status = is_enabled_result.stdout.strip()
+            
+            # Определяем статус для systemd
+            if active_status == 'active':
                 status = 'running'
                 status_class = 'success'
                 status_text = 'Запущен'
-            elif 'inactive' in status_output.lower() or 'stopped' in status_output.lower():
+            elif active_status == 'inactive':
                 status = 'stopped'
                 status_class = 'danger'
                 status_text = 'Остановлен'
-            elif 'failed' in status_output.lower():
+            elif active_status == 'failed':
                 status = 'failed'
                 status_class = 'danger'
                 status_text = 'Ошибка'
             else:
-                status = 'unknown'
-                status_class = 'warning'
-                status_text = 'Неизвестно'
+                # Анализируем вывод status
+                if 'active (running)' in status_output.lower():
+                    status = 'running'
+                    status_class = 'success'
+                    status_text = 'Запущен'
+                elif 'inactive' in status_output.lower() or 'stopped' in status_output.lower():
+                    status = 'stopped'
+                    status_class = 'danger'
+                    status_text = 'Остановлен'
+                elif 'failed' in status_output.lower():
+                    status = 'failed'
+                    status_class = 'danger'
+                    status_text = 'Ошибка'
+                else:
+                    status = 'unknown'
+                    status_class = 'warning'
+                    status_text = 'Неизвестно'
+        
+        elif system_info['zeppelin_type'] == 'daemon':
+            # Для zeppelin-daemon.sh анализируем вывод
+            if result.returncode == 0:
+                if 'running' in status_output.lower() or 'started' in status_output.lower():
+                    status = 'running'
+                    status_class = 'success'
+                    status_text = 'Запущен (daemon)'
+                    active_status = 'running'
+                elif 'stopped' in status_output.lower() or 'not running' in status_output.lower():
+                    status = 'stopped'
+                    status_class = 'danger'
+                    status_text = 'Остановлен (daemon)'
+                    active_status = 'stopped'
+                else:
+                    status = 'unknown'
+                    status_class = 'warning'
+                    status_text = 'Неизвестно (daemon)'
+                    active_status = 'unknown'
+            else:
+                status = 'error'
+                status_class = 'danger'
+                status_text = 'Ошибка (daemon)'
+                active_status = 'error'
+            
+            enabled_status = 'manual'  # daemon запускается вручную
+        
+        else:
+            # Fallback анализ
+            if 'running' in status_output.lower() or 'active' in status_output.lower():
+                status = 'running'
+                status_class = 'success'
+                status_text = 'Запущен'
+            else:
+                status = 'stopped'
+                status_class = 'danger'
+                status_text = 'Остановлен'
         
         # Извлекаем время работы и PID из вывода
         uptime = 'N/A'
@@ -438,7 +553,9 @@ def check_zeppelin_status():
             'memory_usage': memory_usage,
             'full_output': status_output,
             'error': None,
-            'os': system_info['os']
+            'os': system_info['os'],
+            'service_manager': system_info['service_manager'],
+            'zeppelin_type': system_info['zeppelin_type']
         }
         
     except subprocess.TimeoutExpired:
@@ -498,9 +615,11 @@ def execute_service_command(command_type):
                     timeout=90
                 )
                 if result.returncode == 0:
-                    return True, "Сервис успешно перезапущен"
+                    service_type = f"({system_info['zeppelin_type']})"
+                    return True, f"Сервис успешно перезапущен {service_type}"
                 else:
-                    return False, f"Ошибка перезапуска: {result.stderr}"
+                    error_msg = result.stderr or result.stdout
+                    return False, f"Ошибка перезапуска: {error_msg}"
             else:
                 # Останавливаем
                 result_stop = subprocess.run(
@@ -511,10 +630,12 @@ def execute_service_command(command_type):
                 )
                 
                 if result_stop.returncode != 0:
-                    return False, f"Ошибка остановки: {result_stop.stderr}"
+                    error_msg = result_stop.stderr or result_stop.stdout
+                    return False, f"Ошибка остановки: {error_msg}"
                 
-                # Ждем
-                time.sleep(30)
+                # Ждем меньше для daemon
+                wait_time = 10 if system_info['zeppelin_type'] == 'daemon' else 30
+                time.sleep(wait_time)
                 
                 # Запускаем
                 result_start = subprocess.run(
@@ -525,9 +646,11 @@ def execute_service_command(command_type):
                 )
                 
                 if result_start.returncode != 0:
-                    return False, f"Ошибка запуска: {result_start.stderr}"
+                    error_msg = result_start.stderr or result_start.stdout
+                    return False, f"Ошибка запуска: {error_msg}"
                 
-                return True, "Сервис успешно перезапущен"
+                service_type = f"({system_info['zeppelin_type']})"
+                return True, f"Сервис успешно перезапущен {service_type}"
         
         else:
             # Для start и stop
@@ -541,9 +664,11 @@ def execute_service_command(command_type):
                 
                 if result.returncode == 0:
                     action_text = {'start': 'запущен', 'stop': 'остановлен'}
-                    return True, f"Сервис успешно {action_text.get(command_type, command_type)}"
+                    service_type = f"({system_info['zeppelin_type']})"
+                    return True, f"Сервис успешно {action_text.get(command_type, command_type)} {service_type}"
                 else:
-                    return False, f"Ошибка {command_type}: {result.stderr}"
+                    error_msg = result.stderr or result.stdout
+                    return False, f"Ошибка {command_type}: {error_msg}"
             else:
                 return False, f"Команда {command_type} не поддерживается на {system_info['os']}"
         
