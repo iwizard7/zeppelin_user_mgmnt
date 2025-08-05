@@ -115,19 +115,37 @@
                 <a href="{{ url_for('logout') }}" class="btn btn-danger">Logout</a>
             </div>
         </div>
+        
+        <div class="alert alert-info">
+            <strong>ℹ️ Информация:</strong> Пользователи с статусом "Защищен" не могут быть удалены или изменены через этот интерфейс.
+        </div>
 
         <table class="table table-striped">
             <thead>
                 <tr>
                     <th>Username</th>
                     <th>Roles</th>
+                    <th>Status</th>
                 </tr>
             </thead>
             <tbody>
-                {% for user, roles in users.items() %}
+                {% for user, user_data in users.items() %}
                 <tr>
                     <td>{{ user }}</td>
-                    <td>{{ ', '.join(roles) }}</td>
+                    <td>
+                        {% if user_data.protected %}
+                            <span class="text-muted">*** (защищено)</span>
+                        {% else %}
+                            {{ ', '.join(user_data.roles) }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if user_data.protected %}
+                            <span class="badge bg-warning">Защищен</span>
+                        {% else %}
+                            <span class="badge bg-success">Обычный</span>
+                        {% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -143,8 +161,10 @@
         <h5>Assign Role</h5>
         <form action="{{ url_for('assign_user_role') }}" method="POST" class="d-flex mb-3">
             <select class="form-select me-2" name="username">
-                {% for user in users.keys() %}
-                <option value="{{ user }}">{{ user }}</option>
+                {% for user, user_data in users.items() %}
+                    {% if not user_data.protected %}
+                        <option value="{{ user }}">{{ user }}</option>
+                    {% endif %}
                 {% endfor %}
             </select>
             <select class="form-select me-2" name="role">
@@ -158,8 +178,10 @@
         <h5>Unassign Role</h5>
         <form action="{{ url_for('unassign_user_role') }}" method="POST" class="d-flex mb-3">
             <select class="form-select me-2" name="username">
-                {% for user in users.keys() %}
-                <option value="{{ user }}">{{ user }}</option>
+                {% for user, user_data in users.items() %}
+                    {% if not user_data.protected %}
+                        <option value="{{ user }}">{{ user }}</option>
+                    {% endif %}
                 {% endfor %}
             </select>
             <select class="form-select me-2" name="role">
@@ -173,8 +195,10 @@
         <h5>Remove User</h5>
         <form action="{{ url_for('delete_user') }}" method="POST" class="d-flex mb-3">
             <select class="form-select me-2" name="username">
-                {% for user in users.keys() %}
-                <option value="{{ user }}">{{ user }}</option>
+                {% for user, user_data in users.items() %}
+                    {% if not user_data.protected %}
+                        <option value="{{ user }}">{{ user }}</option>
+                    {% endif %}
                 {% endfor %}
             </select>
             <button type="submit" class="btn btn-danger"

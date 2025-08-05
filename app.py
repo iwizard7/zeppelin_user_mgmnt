@@ -12,6 +12,22 @@ app = Flask(__name__)
 app.secret_key = 'your_secret_key'
 shiro_ini_path = 'shiro.ini'
 
+# Защищенные пользователи, которых нельзя удалять или изменять
+PROTECTED_USERS = {'admin'}
+
+
+def is_protected_user(username):
+    """
+    Проверяет, является ли пользователь защищенным
+    
+    Args:
+        username (str): Имя пользователя
+    
+    Returns:
+        bool: True если пользователь защищен
+    """
+    return username.lower() in PROTECTED_USERS
+
 
 def detect_zeppelin_installation():
     """
@@ -804,10 +820,20 @@ def dashboard():
     """
     users, roles, _ = read_shiro_ini()
     zeppelin_status = check_zeppelin_status()
+    
+    # Фильтруем пользователей для отображения (скрываем пароли защищенных пользователей)
+    display_users = {}
+    for username, user_roles in {k: v['roles'] for k, v in users.items()}.items():
+        if is_protected_user(username):
+            display_users[username] = {'roles': user_roles, 'protected': True}
+        else:
+            display_users[username] = {'roles': user_roles, 'protected': False}
+    
     return render_template('dashboard.html', 
-                         users={k: v['roles'] for k, v in users.items()}, 
+                         users=display_users, 
                          roles=roles,
-                         zeppelin_status=zeppelin_status)
+                         zeppelin_status=zeppelin_status,
+                         protected_users=PROTECTED_USERS)
 
 
 @app.route('/logout')
@@ -885,6 +911,12 @@ def delete_user():
         flash('Нельзя удалить самого себя', 'error')
         return redirect(url_for('dashboard'))
     
+    # Защита от удаления защищенных пользователей
+    if is_protected_user(target_username):
+        flash(f'Пользователь {target_username} защищен от удаления', 'error')
+        log_user_action('DELETE_USER_BLOCKED', current_user, f'Attempted to delete protected user: {target_username}')
+        return redirect(url_for('dashboard'))
+    
     users, roles, sections = read_shiro_ini()
     
     if target_username in users:
@@ -916,6 +948,12 @@ def assign_user_role():
     
     if not target_username or not role:
         flash('Не выбран пользователь или роль', 'error')
+        return redirect(url_for('dashboard'))
+    
+    # Защита от изменения ролей защищенных пользователей
+    if is_protected_user(target_username):
+        flash(f'Роли пользователя {target_username} защищены от изменений', 'error')
+        log_user_action('ASSIGN_ROLE_BLOCKED', current_user, f'Attempted to modify protected user: {target_username}')
         return redirect(url_for('dashboard'))
     
     users, roles, sections = read_shiro_ini()
@@ -953,6 +991,12 @@ def unassign_user_role():
     
     if not target_username or not role:
         flash('Не выбран пользователь или роль', 'error')
+        return redirect(url_for('dashboard'))
+    
+    # Защита от изменения ролей защищенных пользователей
+    if is_protected_user(target_username):
+        flash(f'Роли пользователя {target_username} защищены от изменений', 'error')
+        log_user_action('UNASSIGN_ROLE_BLOCKED', current_user, f'Attempted to modify protected user: {target_username}')
         return redirect(url_for('dashboard'))
     
     users, roles, sections = read_shiro_ini()
