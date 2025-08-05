@@ -655,6 +655,8 @@ def execute_service_command(command_type):
         else:
             # Для start и stop
             if command_type in system_info['commands']:
+                logger.info(f"Выполняем команду {command_type}: {' '.join(system_info['commands'][command_type])}")
+                
                 result = subprocess.run(
                     system_info['commands'][command_type],
                     capture_output=True,
@@ -662,22 +664,86 @@ def execute_service_command(command_type):
                     timeout=60
                 )
                 
-                if result.returncode == 0:
-                    action_text = {'start': 'запущен', 'stop': 'остановлен'}
-                    service_type = f"({system_info['zeppelin_type']})"
-                    return True, f"Сервис успешно {action_text.get(command_type, command_type)} {service_type}"
+                logger.info(f"Результат команды {command_type}: returncode={result.returncode}")
+                logger.info(f"stdout: {result.stdout}")
+                logger.info(f"stderr: {result.stderr}")
+                
+                # Для daemon скрипта проверяем результат по-особому
+                if system_info['zeppelin_type'] == 'daemon':
+                    if command_type == 'start':
+                        # Для start команды daemon может возвращать 0 даже если уже запущен
+                        # Проверим статус через несколько секунд
+                        time.sleep(3)
+                        
+                        # Проверяем статус после запуска
+                        status_result = subprocess.run(
+                            system_info['commands']['status'],
+                            capture_output=True,
+                            text=True,
+                            timeout=30
+                        )
+                        
+                        logger.info(f"Проверка статуса после start: {status_result.stdout}")
+                        
+                        if 'running' in status_result.stdout.lower() or 'started' in status_result.stdout.lower():
+                            service_type = f"({system_info['zeppelin_type']})"
+                            return True, f"Сервис успешно запущен {service_type}"
+                        else:
+                            # Попробуем альтернативный способ - через restart
+                            logger.info("Обычный start не сработал, пробуем restart")
+                            restart_result = subprocess.run(
+                                system_info['commands']['restart'],
+                                capture_output=True,
+                                text=True,
+                                timeout=60
+                            )
+                            
+                            if restart_result.returncode == 0:
+                                # Проверяем статус еще раз
+                                time.sleep(3)
+                                final_status = subprocess.run(
+                                    system_info['commands']['status'],
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=30
+                                )
+                                
+                                if 'running' in final_status.stdout.lower():
+                                    service_type = f"({system_info['zeppelin_type']})"
+                                    return True, f"Сервис успешно запущен через restart {service_type}"
+                            
+                            error_msg = result.stderr or result.stdout or "Не удалось запустить сервис"
+                            return False, f"Ошибка запуска daemon: {error_msg}"
+                    else:
+                        # Для stop и других команд используем стандартную логику
+                        if result.returncode == 0:
+                            action_text = {'start': 'запущен', 'stop': 'остановлен'}
+                            service_type = f"({system_info['zeppelin_type']})"
+                            return True, f"Сервис успешно {action_text.get(command_type, command_type)} {service_type}"
+                        else:
+                            error_msg = result.stderr or result.stdout
+                            return False, f"Ошибка {command_type}: {error_msg}"
                 else:
-                    error_msg = result.stderr or result.stdout
-                    return False, f"Ошибка {command_type}: {error_msg}"
+                    # Для systemd используем стандартную логику
+                    if result.returncode == 0:
+                        action_text = {'start': 'запущен', 'stop': 'остановлен'}
+                        service_type = f"({system_info['zeppelin_type']})"
+                        return True, f"Сервис успешно {action_text.get(command_type, command_type)} {service_type}"
+                    else:
+                        error_msg = result.stderr or result.stdout
+                        return False, f"Ошибка {command_type}: {error_msg}"
             else:
                 return False, f"Команда {command_type} не поддерживается на {system_info['os']}"
         
     except subprocess.TimeoutExpired:
         logger.error(f"Таймаут при выполнении команды {command_type}")
         return False, "Таймаут выполнения команды"
-    except FileNotFoundError:
-        logger.error(f"Команда {system_info['service_manager']} не найдена")
-        return False, f"Менеджер сервисов {system_info['service_manager']} не найден"
+    except FileNotFoundError as e:
+        logger.error(f"Команда не найдена: {str(e)}")
+        if system_info['zeppelin_type'] == 'daemon':
+            return False, f"Скрипт zeppelin-daemon.sh не найден: {system_info.get('daemon_path', 'путь неизвестен')}"
+        else:
+            return False, f"Менеджер сервисов {system_info['service_manager']} не найден"
     except Exception as e:
         logger.error(f"Неожиданная ошибка при {command_type} Zeppelin: {str(e)}")
         return False, f"Неожиданная ошибка: {str(e)}"
