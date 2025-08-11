@@ -147,33 +147,37 @@ body {
 .btn-primary {
     background-color: var(--btn-primary-bg);
     border-color: var(--btn-primary-bg);
+    color: #ffffff !important;
 }
 
 .btn-success {
     background-color: var(--btn-success-bg);
     border-color: var(--btn-success-bg);
+    color: #ffffff !important;
 }
 
 .btn-danger {
     background-color: var(--btn-danger-bg);
     border-color: var(--btn-danger-bg);
+    color: #ffffff !important;
 }
 
 .btn-warning {
     background-color: var(--btn-warning-bg);
     border-color: var(--btn-warning-bg);
-    color: #000;
+    color: #000 !important;
 }
 
 .btn-info {
     background-color: var(--btn-info-bg);
     border-color: var(--btn-info-bg);
-    color: #000;
+    color: #000 !important;
 }
 
 .btn-secondary {
     background-color: var(--btn-secondary-bg);
     border-color: var(--btn-secondary-bg);
+    color: #ffffff !important;
 }
 
 /* Анимация переключения темы */
@@ -257,6 +261,112 @@ footer a {
 .form-row .btn {
     min-width: 120px;
     white-space: nowrap;
+}
+
+/* Дополнительные стили для темной темы - принудительно белый текст */
+[data-theme="dark"] {
+    color: #ffffff !important;
+}
+
+[data-theme="dark"] h1,
+[data-theme="dark"] h2,
+[data-theme="dark"] h3,
+[data-theme="dark"] h4,
+[data-theme="dark"] h5,
+[data-theme="dark"] h6 {
+    color: #ffffff !important;
+}
+
+[data-theme="dark"] p,
+[data-theme="dark"] span,
+[data-theme="dark"] div,
+[data-theme="dark"] label,
+[data-theme="dark"] small {
+    color: #ffffff !important;
+}
+
+[data-theme="dark"] .card-body,
+[data-theme="dark"] .card-header,
+[data-theme="dark"] .card-title {
+    color: #ffffff !important;
+}
+
+[data-theme="dark"] .table,
+[data-theme="dark"] .table td,
+[data-theme="dark"] .table th {
+    color: #ffffff !important;
+}
+
+[data-theme="dark"] .table-light th {
+    color: #ffffff !important;
+    background-color: var(--bg-secondary) !important;
+}
+
+[data-theme="dark"] .form-label,
+[data-theme="dark"] .form-text {
+    color: #ffffff !important;
+}
+
+[data-theme="dark"] .alert-info {
+    color: #ffffff !important;
+}
+
+[data-theme="dark"] .text-center {
+    color: #ffffff !important;
+}
+
+/* Стили для input полей и placeholder текста */
+[data-theme="dark"] .form-control,
+[data-theme="dark"] .form-select {
+    color: #ffffff !important;
+    background-color: var(--input-bg) !important;
+    border-color: var(--input-border) !important;
+}
+
+[data-theme="dark"] .form-control::placeholder {
+    color: #adb5bd !important;
+    opacity: 1;
+}
+
+[data-theme="dark"] .form-select option {
+    background-color: var(--input-bg) !important;
+    color: #ffffff !important;
+}
+
+/* Стили для кнопок - текст должен быть читаемым */
+[data-theme="dark"] .btn {
+    color: #ffffff !important;
+}
+
+[data-theme="dark"] .btn-outline-secondary {
+    color: #ffffff !important;
+    border-color: var(--border-color) !important;
+}
+
+[data-theme="dark"] .btn-outline-secondary:hover {
+    background-color: var(--btn-secondary-bg) !important;
+    color: #ffffff !important;
+}
+
+[data-theme="dark"] .btn-outline-primary {
+    color: #ffffff !important;
+    border-color: var(--btn-primary-bg) !important;
+}
+
+[data-theme="dark"] .btn-outline-primary:hover {
+    background-color: var(--btn-primary-bg) !important;
+    color: #ffffff !important;
+}
+
+/* Исключения - элементы которые должны оставаться цветными */
+[data-theme="dark"] .badge,
+[data-theme="dark"] .navbar-text,
+[data-theme="dark"] .navbar-brand {
+    /* Эти элементы сохраняют свои цвета */
+}
+
+[data-theme="dark"] .text-muted {
+    color: #adb5bd !important;
 }
 
 /* Адаптивность для мобильных */
