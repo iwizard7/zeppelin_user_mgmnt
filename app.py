@@ -3,13 +3,14 @@ import os
 import time
 import logging
 from logging.handlers import RotatingFileHandler
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 import subprocess
 import platform
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'
+app.permanent_session_lifetime = timedelta(hours=8)  # Сессия истекает через 8 часов
 shiro_ini_path = 'shiro.ini'
 
 # Защищенные пользователи, которых нельзя удалять или изменять
@@ -223,6 +224,33 @@ def setup_logging():
 
 # Инициализируем логирование
 logger = setup_logging()
+
+
+@app.before_request
+def check_session_timeout():
+    """Проверяет истечение сессии перед каждым запросом"""
+    # Исключаем статические файлы и страницу логина
+    if request.endpoint in ['static', 'login_page', 'login']:
+        return
+    
+    if 'username' in session:
+        # Проверяем время последней активности
+        if 'last_activity' in session:
+            last_activity = session['last_activity']
+            if isinstance(last_activity, str):
+                last_activity = datetime.fromisoformat(last_activity)
+            
+            # Если прошло больше 8 часов - завершаем сессию
+            if datetime.now() - last_activity > timedelta(hours=8):
+                username = session.get('username', 'unknown')
+                log_user_action('SESSION_TIMEOUT', username, 'Session expired after 8 hours')
+                session.clear()
+                flash('Сессия истекла. Войдите в систему снова.', 'warning')
+                return redirect(url_for('login_page'))
+        
+        # Обновляем время последней активности
+        session['last_activity'] = datetime.now().isoformat()
+        session.permanent = True
 
 
 def login_required(f):
@@ -820,6 +848,8 @@ def login():
     users, _, _ = read_shiro_ini()
     if username in users and users[username]['password'] == password:
         session['username'] = username
+        session['last_activity'] = datetime.now().isoformat()
+        session.permanent = True
         log_user_action('LOGIN_SUCCESS', username)
         return redirect(url_for('dashboard'))
     else:
@@ -864,7 +894,8 @@ def logout():
     """
     username = session.get('username', 'unknown')
     log_user_action('LOGOUT', username)
-    session.pop('username', None)
+    session.clear()  # Полная очистка сессии
+    flash('Вы успешно вышли из системы', 'success')
     return redirect(url_for('login_page'))
 
 

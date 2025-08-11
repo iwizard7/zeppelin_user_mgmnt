@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='themes.css') }}" rel="stylesheet">
+    <style>
+        .dashboard-container {
+            max-width: 900px;
+            margin: 20px auto;
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px var(--card-shadow);
+            border: 1px solid var(--border-color);
+        }
+
+        .navbar {
+            margin-bottom: 0;
+        }
+
+        .navbar-text small {
+            font-size: 0.8em;
+        }
+
+        /* Дополнительные стили для совместимости с темной темой */
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px var(--card-shadow);
+        }
+
+        #usersTable tbody tr:hover {
+            background-color: var(--table-hover-bg);
+        }
+
+        #usersTable tbody tr[style*="none"] {
+            opacity: 0;
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Навбар -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container-fluid">
+            <span class="navbar-brand">🚀 Zeppelin User Management</span>
+            <div class="navbar-nav ms-auto d-flex align-items-center">
+                <button id="navbar-theme-toggle" class="btn btn-outline-light btn-sm me-3" onclick="toggleTheme()"
+                    title="Переключить тему">
+                    <span id="theme-icon">🌙</span>
+                </button>
+                <!-- Отладочная информация -->
+                <div id="debug-info" class="navbar-text me-2" style="font-size: 0.7em; color: #ffc107;">
+                    <span id="debug-status">🔍 Загрузка...</span>
+                </div>
+                <!-- Кнопка ручного тестирования -->
+                <button onclick="manualThemeTest()" class="btn btn-outline-warning btn-sm me-2" title="Ручной тест">
+                    🧪
+                </button>
+                <span class="navbar-text me-3">
+                    👤 {{ session.username }}
+                    <small class="text-muted">| Сессия активна</small>
+                </span>
+                <a class="nav-link" href="{{ url_for('logout') }}">
+                    <button class="btn btn-outline-light btn-sm">Выйти</button>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="dashboard-container">
+        <h2 class="text-center">Dashboard</h2>
+
+        <!-- Flash messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ 'danger' if category == 'error' else 'warning' if category == 'warning' else 'success' }} alert-dismissible fade show"
+            role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <!-- Zeppelin Status -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Статус сервиса Zeppelin</h5>
+                <div>
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="refreshStatus()">
+                        <span id="refresh-icon">🔄</span> Обновить
+                    </button>
+                    <form action="{{ url_for('start_zeppelin') }}" method="POST" class="d-inline"></form>
+                    <button type="submit" class="btn btn-sm btn-success"
+                        onclick="return confirm('Запустить сервис Zeppelin?')">
+                        ▶️ Запустить
+                    </button>
+                    </form>
+                    <form action="{{ url_for('stop_zeppelin') }}" method="POST" class="d-inline">
+                        <button type="submit" class="btn btn-sm btn-danger"
+                            onclick="return confirm('Остановить сервис Zeppelin?')">
+                            ⏹️ Остановить
+                        </button>
+                    </form>
+                    <form action="{{ url_for('restart') }}" method="POST" class="d-inline">
+                        <button type="submit" class="btn btn-sm btn-warning"
+                            onclick="return confirm('Перезапустить сервис Zeppelin?')">
+                            ⚡ Перезапустить
+                        </button>
+                    </form>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div id="status-info">
+                            {% if zeppelin_status %}
+                            <div class="d-flex align-items-center mb-2">
+                                <span class="badge bg-{{ zeppelin_status.status_class }} me-2">{{
+                                    zeppelin_status.status_text }}</span>
+                                <small class="text-muted">Статус: {{ zeppelin_status.active }}</small>
+                            </div>
+                            {% if zeppelin_status.pid != 'N/A' %}
+                            <p class="mb-1"><strong>PID:</strong> {{ zeppelin_status.pid }}</p>
+                            {% endif %}
+                            {% if zeppelin_status.memory_usage != 'N/A' %}
+                            <p class="mb-1"><strong>Память:</strong> {{ zeppelin_status.memory_usage }}</p>
+                            {% endif %}
+                            {% if zeppelin_status.uptime != 'N/A' %}
+                            <p class="mb-1"><strong>Время работы:</strong> {{ zeppelin_status.uptime }}</p>
+                            {% endif %}
+                            {% if zeppelin_status.enabled %}
+                            <p class="mb-1"><strong>Автозапуск:</strong> {{ zeppelin_status.enabled }}</p>
+                            {% endif %}
+                            {% if zeppelin_status.service_manager %}
+                            <p class="mb-1"><strong>Управление:</strong> {{ zeppelin_status.service_manager }}</p>
+                            {% endif %}
+                            {% if zeppelin_status.error %}
+                            <div class="alert alert-danger mt-2">{{ zeppelin_status.error }}</div>
+                            {% endif %}
+                            {% else %}
+                            <div class="alert alert-warning">Не удалось получить статус сервиса</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="text-end">
+                            <small class="text-muted">Последнее обновление: <span
+                                    id="last-update">--:--:--</span></small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-between mb-3">
+            <h5>Users & Roles</h5>
+            <div>
+                <a href="{{ url_for('logout') }}" class="btn btn-danger">Logout</a>
+            </div>
+        </div>
+
+        <div class="main-container">
+            <div class="alert alert-info">
+                <strong>ℹ️ Информация:</strong> Пользователи с статусом "Защищен" не могут быть удалены или изменены
+                через
+                этот интерфейс.
+            </div>
+
+            <!-- Поиск и фильтрация пользователей -->
+            <div class="card mb-4 filter-card">
+                <div class="card-header">
+                    <h6 class="mb-0">🔍 Поиск и фильтрация пользователей</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <input type="text" id="userSearch" class="form-control"
+                                placeholder="Поиск по имени пользователя..." onkeyup="filterUsers()">
+                        </div>
+                        <div class="col-md-3">
+                            <select id="roleFilter" class="form-select" onchange="filterUsers()">
+                                <option value="">Все роли</option>
+                                {% for role in roles.keys() %}
+                                <option value="{{ role }}">{{ role }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <select id="statusFilter" class="form-select" onchange="filterUsers()">
+                                <option value="">Все статусы</option>
+                                <option value="protected">Защищенные</option>
+                                <option value="normal">Обычные</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <button type="button" class="btn btn-outline-secondary" onclick="clearFilters()">
+                                🗑️ Очистить
+                            </button>
+                        </div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-12">
+                            <small class="text-muted">
+                                Найдено: <span id="userCount">{{ users|length }}</span> пользователей
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Таблица пользователей -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">👥 Список пользователей</h6>
+                    <span class="badge bg-primary">Всего: <span id="userCount">{{ users|length }}</span></span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0" id="usersTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 30%">Username</th>
+                                    <th style="width: 45%">Roles</th>
+                                    <th style="width: 25%">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for user, user_data in users.items() %}
+                                <tr>
+                                    <td><strong>{{ user }}</strong></td>
+                                    <td>
+                                        {% if user_data.protected %}
+                                        <span class="text-muted">*** (защищено)</span>
+                                        {% else %}
+                                        {% for role in user_data.roles %}
+                                        <span class="badge bg-secondary me-1">{{ role }}</span>
+                                        {% endfor %}
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if user_data.protected %}
+                                        <span class="badge bg-warning">🔒 Защищен</span>
+                                        {% else %}
+                                        <span class="badge bg-success">✓ Обычный</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Добавить пользователя -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h6 class="mb-0">➕ Добавить пользователя</h6>
+                    </div>
+                    <div class="card-body">
+                        <form action="{{ url_for('add_user') }}" method="POST" class="form-row">
+                            <input type="text" class="form-control" name="username" placeholder="Имя пользователя"
+                                required>
+                            <input type="password" class="form-control" name="password" placeholder="Пароль" required>
+                            <button type="submit" class="btn btn-success">Добавить</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Назначить роль -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h6 class="mb-0">🎭 Назначить роль</h6>
+                    </div>
+                    <div class="card-body">
+                        <form action="{{ url_for('assign_user_role') }}" method="POST" class="form-row">
+                            <select class="form-select" name="username" required>
+                                <option value="">Выберите пользователя</option>
+                                {% for user, user_data in users.items() %}
+                                {% if not user_data.protected %}
+                                <option value="{{ user }}">{{ user }}</option>
+                                {% endif %}
+                                {% endfor %}
+                            </select>
+                            <select class="form-select" name="role" required>
+                                <option value="">Выберите роль</option>
+                                {% for role in roles.keys() %}
+                                <option value="{{ role }}">{{ role }}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="submit" class="btn btn-primary">Назначить</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Удалить роль -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h6 class="mb-0">🎭❌ Удалить роль</h6>
+                    </div>
+                    <div class="card-body">
+                        <form action="{{ url_for('unassign_user_role') }}" method="POST" class="form-row">
+                            <select class="form-select" name="username" required>
+                                <option value="">Выберите пользователя</option>
+                                {% for user, user_data in users.items() %}
+                                {% if not user_data.protected %}
+                                <option value="{{ user }}">{{ user }}</option>
+                                {% endif %}
+                                {% endfor %}
+                            </select>
+                            <select class="form-select" name="role" required>
+                                <option value="">Выберите роль</option>
+                                {% for role in roles.keys() %}
+                                <option value="{{ role }}">{{ role }}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="submit" class="btn btn-warning">Удалить</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Удалить пользователя -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h6 class="mb-0">🗑️ Удалить пользователя</h6>
+                    </div>
+                    <div class="card-body">
+                        <form action="{{ url_for('delete_user') }}" method="POST" class="form-row">
+                            <select class="form-select" name="username" required>
+                                <option value="">Выберите пользователя для удаления</option>
+                                {% for user, user_data in users.items() %}
+                                {% if not user_data.protected %}
+                                <option value="{{ user }}">{{ user }}</option>
+                                {% endif %}
+                                {% endfor %}
+                            </select>
+                            <button type="submit" class="btn btn-danger"
+                                onclick="return confirm('Вы уверены, что хотите удалить этого пользователя?')">Удалить</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Изменить пароль -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h6 class="mb-0">🔑 Изменить пароль</h6>
+                    </div>
+                    <div class="card-body">
+                        <form action="{{ url_for('change_password') }}" method="POST" class="form-row">
+                            <select class="form-select" name="username" required>
+                                <option value="">Выберите пользователя</option>
+                                {% for user, user_data in users.items() %}
+                                {% if not user_data.protected %}
+                                <option value="{{ user }}">{{ user }}</option>
+                                {% endif %}
+                                {% endfor %}
+                            </select>
+                            <input type="password" class="form-control" name="new_password" placeholder="Новый пароль"
+                                required>
+                            <button type="submit" class="btn btn-info"
+                                onclick="return confirm('Вы уверены, что хотите изменить пароль этого пользователя?')">Изменить</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Добавить новую роль -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h6 class="mb-0">🏷️ Добавить новую роль</h6>
+                    </div>
+                    <div class="card-body">
+                        <form action="{{ url_for('add_role') }}" method="POST" class="form-row">
+                            <input type="text" class="form-control" name="role_name" placeholder="Название новой роли"
+                                required>
+                            <button type="submit" class="btn btn-secondary">Добавить</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer class="text-center py-3 mt-4">
+            &copy; iwizard7 | <a href="https://github.com/iwizard7/zeppelin_user_mgmnt" target="_blank">GitHub
+                Repository</a>
+        </footer>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+        <!-- <script src="{{ url_for('static', filename='theme-toggle.js') }}"></script> -->
+
+        <!-- Предварительная загрузка темы для избежания мигания -->
+        <script>
+            (function () {
+                const savedTheme = localStorage.getItem('theme');
+                if (savedTheme) {
+                    document.documentElement.setAttribute('data-theme', savedTheme);
+                }
+            })();
+        </script>
+
+        <script>
+            // ПРОСТЫЕ ГЛОБАЛЬНЫЕ ФУНКЦИИ
+            
+            function updateDebugInfo(message) {
+                const debugStatus = document.getElementById('debug-status');
+                if (debugStatus) {
+                    debugStatus.textContent = message;
+                }
+                console.log('🐛 DEBUG:', message);
+            }
+            
+            function toggleTheme() {
+                console.log('🎨 toggleTheme вызвана');
+                updateDebugInfo('🎨 Переключение...');
+                
+                try {
+                    const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+                    const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+                    
+                    console.log('Переключаем:', currentTheme, '→', newTheme);
+                    
+                    document.documentElement.setAttribute('data-theme', newTheme);
+                    localStorage.setItem('theme', newTheme);
+                    
+                    const icon = document.getElementById('theme-icon');
+                    if (icon) {
+                        icon.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+                        console.log('Иконка обновлена на:', icon.textContent);
+                    }
+                    
+                    updateDebugInfo(`✅ ${newTheme} тема`);
+                    
+                } catch (error) {
+                    console.error('Ошибка:', error);
+                    updateDebugInfo('💥 Ошибка');
+                }
+            }
+            
+            function manualThemeTest() {
+                console.log('🧪 Ручной тест');
+                updateDebugInfo('🧪 Тест...');
+                toggleTheme();
+            }
+            
+            // Делаем функции глобальными
+            window.toggleTheme = toggleTheme;
+            window.manualThemeTest = manualThemeTest;
+            window.updateDebugInfo = updateDebugInfo;
+            
+            // Простая инициализация
+            document.addEventListener('DOMContentLoaded', function() {
+                console.log('🚀 DOM загружен');
+                updateDebugInfo('🚀 Инициализация...');
+                
+                const savedTheme = localStorage.getItem('theme') || 'light';
+                document.documentElement.setAttribute('data-theme', savedTheme);
+                
+                const icon = document.getElementById('theme-icon');
+                if (icon) {
+                    icon.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+                    console.log('Начальная иконка:', icon.textContent);
+                }
+                
+                updateDebugInfo('✅ Готово');
+                
+                setTimeout(() => {
+                    updateDebugInfo('🎯 Кликните кнопку');
+                }, 2000);
+            });
+
+            // ИНИЦИАЛИЗАЦИЯ ТЕМЫ ПРИ ЗАГРУЗКЕ
+            document.addEventListener('DOMContentLoaded', function () {
+                console.log('🚀 ИНИЦИАЛИЗАЦИЯ ТЕМЫ...');
+
+                try {
+                    // Применяем сохраненную тему
+                    const savedTheme = localStorage.getItem('theme') || 'light';
+                    console.log('💾 Сохраненная тема:', savedTheme);
+
+                    document.documentElement.setAttribute('data-theme', savedTheme);
+
+                    // Устанавливаем правильную иконку
+                    const icon = document.getElementById('theme-icon');
+                    if (icon) {
+                        icon.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+                        console.log('🎯 Начальная иконка установлена:', icon.textContent);
+                    } else {
+                        console.error('❌ Иконка не найдена при инициализации!');
+                    }
+
+                    // Проверяем кнопку
+                    const button = document.getElementById('navbar-theme-toggle');
+                    if (button) {
+                        console.log('✅ Кнопка найдена, onclick работает');
+                        // Добавляем дополнительный обработчик на случай проблем с onclick
+                        button.addEventListener('click', function (e) {
+                            console.log('🖱️ Клик через addEventListener');
+                            toggleTheme();
+                        });
+                    } else {
+                        console.error('❌ Кнопка не найдена!');
+                    }
+
+                    console.log('✅ ИНИЦИАЛИЗАЦИЯ ЗАВЕРШЕНА');
+                } catch (error) {
+                    console.error('💥 ОШИБКА при инициализации:', error);
+                }
+            });
+
+            // Обновляем иконку кнопки
+            const icon = document.getElementById('theme-icon');
+            if (icon) {
+                icon.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+                console.log('Иконка обновлена на:', icon.textContent);
+            }
+
+            // Обновляем title кнопки
+            const button = document.getElementById('navbar-theme-toggle');
+            if (button) {
+                button.title = newTheme === 'dark' ? 'Переключить на светлую тему' : 'Переключить на темную тему';
+            }
+            }
+
+            // Инициализация при загрузке страницы
+            document.addEventListener('DOMContentLoaded', function () {
+                console.log('Страница загружена, инициализация темы...');
+
+                // Применяем сохраненную тему
+                const savedTheme = localStorage.getItem('theme') || 'light';
+                document.documentElement.setAttribute('data-theme', savedTheme);
+
+                // Устанавливаем правильную иконку
+                const icon = document.getElementById('theme-icon');
+                if (icon) {
+                    icon.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+                    console.log('Начальная иконка установлена:', icon.textContent);
+                }
+
+                // Устанавливаем правильный title
+                const button = document.getElementById('navbar-theme-toggle');
+                if (button) {
+                    button.title = savedTheme === 'dark' ? 'Переключить на светлую тему' : 'Переключить на темную тему';
+                }
+            });
+
+            // Функции поиска и фильтрации пользователей
+            function filterUsers() {
+                const searchTerm = document.getElementById('userSearch').value.toLowerCase();
+                const roleFilter = document.getElementById('roleFilter').value;
+                const statusFilter = document.getElementById('statusFilter').value;
+
+                const table = document.getElementById('usersTable');
+                const rows = table.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
+                let visibleCount = 0;
+
+                for (let i = 0; i < rows.length; i++) {
+                    const row = rows[i]; const
+                        username = row.cells[0].textContent.toLowerCase(); const roles = row.cells[1].textContent.toLowerCase(); const
+                            status = row.cells[2].textContent.toLowerCase(); let showRow = true; // Фильтр по имени пользователя if
+                    (searchTerm && !username.includes(searchTerm)) { showRow = false; } // Фильтр по роли if (roleFilter &&
+                    !roles.includes(roleFilter.toLowerCase())) { showRow = false; } // Фильтр по статусу if (statusFilter) { if
+                    (statusFilter === 'protected' && !status.includes('защищен')) { showRow = false; } if (statusFilter === 'normal'
+                        && status.includes('защищен')) { showRow = false; }
+                } row.style.display = showRow ? '' : 'none'; if (showRow)
+                    visibleCount++;
+            } // Обновляем счетчик document.getElementById('userCount').textContent=visibleCount; //
+            Показываем сообщение если ничего не найдено showNoResultsMessage(visibleCount === 0); } function
+                clearFilters() {
+                document.getElementById('userSearch').value = '';
+                document.getElementById('roleFilter').value = ''; document.getElementById('statusFilter').value = '';
+                filterUsers();
+            } function showNoResultsMessage(show) {
+                let
+                    noResultsRow = document.getElementById('noResultsRow'); if (show && !noResultsRow) {
+                        const
+                            table = document.getElementById('usersTable'); const tbody = table.getElementsByTagName('tbody')[0];
+                        noResultsRow = document.createElement('tr'); noResultsRow.id = 'noResultsRow';
+                        noResultsRow.innerHTML = '<td colspan="3" class="text-center text-muted py-4">🔍 Пользователи не найдены. Попробуйте изменить критерии поиска.</td>'
+                            ; tbody.appendChild(noResultsRow);
+                    } else if (!show && noResultsRow) { noResultsRow.remove(); }
+            } //
+            Инициализация поиска при загрузке страницы document.addEventListener('DOMContentLoaded', function () { //
+            Добавляем обработчик Enter для поиска document.getElementById('userSearch').addEventListener('keypress',
+                function (e) { if (e.key === 'Enter') { filterUsers(); } });
+            }); let statusUpdateInterval; function
+                refreshStatus() {
+                const refreshIcon = document.getElementById('refresh-icon'); const
+                    statusInfo = document.getElementById('status-info'); const lastUpdate = document.getElementById('last-update');
+                // Показываем индикатор загрузки refreshIcon.style.animation='spin 1s linear infinite' ;
+                fetch('/check_zeppelin_status').then(response => response.json())
+                    .then(data => {
+                        updateStatusDisplay(data);
+                        lastUpdate.textContent = new Date().toLocaleTimeString();
+                    })
+                    .catch(error => {
+                        console.error('Ошибка при получении статуса:', error);
+                        statusInfo.innerHTML = '<div class="alert alert-danger">Ошибка при получении статуса сервиса</div>';
+                    })
+                    .finally(() => {
+                        // Убираем индикатор загрузки
+                        refreshIcon.style.animation = '';
+                    });
+            }
+
+            function updateStatusDisplay(status) {
+                const statusInfo = document.getElementById('status-info');
+
+                let html = `
+            <div class="d-flex align-items-center mb-2">
+                <span class="badge bg-${status.status_class} me-2">${status.status_text}</span>
+                <small class="text-muted">Статус: ${status.active || 'неизвестно'}</small>
+            </div>
+            `;
+
+                if (status.pid && status.pid !== 'N/A') {
+                    html += `<p class="mb-1"><strong>PID:</strong> ${status.pid}</p>`;
+                }
+
+                if (status.memory_usage && status.memory_usage !== 'N/A') {
+                    html += `<p class="mb-1"><strong>Память:</strong> ${status.memory_usage}</p>`;
+                }
+
+                if (status.uptime && status.uptime !== 'N/A') {
+                    html += `<p class="mb-1"><strong>Время работы:</strong> ${status.uptime}</p>`;
+                }
+
+                if (status.enabled) {
+                    html += `<p class="mb-1"><strong>Автозапуск:</strong> ${status.enabled}</p>`;
+                }
+
+                if (status.service_manager) {
+                    html += `<p class="mb-1"><strong>Управление:</strong> ${status.service_manager}</p>`;
+                }
+
+                if (status.error) {
+                    html += `<div class="alert alert-danger mt-2">${status.error}</div>`;
+                }
+
+                statusInfo.innerHTML = html;
+            }
+
+            // Автоматическое обновление каждые 30 секунд
+            function startAutoRefresh() {
+                statusUpdateInterval = setInterval(refreshStatus, 30000);
+            }
+
+            function stopAutoRefresh() {
+                if (statusUpdateInterval) {
+                    clearInterval(statusUpdateInterval);
+                }
+            }
+
+            // Запускаем автообновление при загрузке страницы
+            document.addEventListener('DOMContentLoaded', function () {
+                startAutoRefresh();
+            });
+
+            // Останавливаем автообновление при уходе со страницы
+            window.addEventListener('beforeunload', function () {
+                stopAutoRefresh();
+            });
+
+            // CSS для анимации вращения добавлен в themes.css
+
+            // Дублирующая функция удалена - используется функция из начала файла
+
+            // ИНИЦИАЛИЗАЦИЯ ТЕМЫ
+            document.addEventListener('DOMContentLoaded', function () {
+                console.log('🚀 Инициализация темы...');
+
+                const savedTheme = localStorage.getItem('theme') || 'light';
+                document.documentElement.setAttribute('data-theme', savedTheme);
+
+                const icon = document.getElementById('theme-icon');
+                if (icon) {
+                    icon.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+                    console.log('🎯 Начальная иконка:', icon.textContent);
+                }
+            });
+        </script>
+</body>
+
+</html>

@@ -1,0 +1,285 @@
+/* Переключатель темы */
+.theme-toggle {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000;
+    background: var(--card-bg);
+    border: 2px solid var(--border-color, #dee2e6);
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    box-shadow: 0 4px 12px var(--card-shadow);
+}
+
+.theme-toggle:hover {
+    transform: scale(1.1);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+/* Светлая тема (по умолчанию) */
+:root {
+    --bg-color: #ffffff;
+    --bg-secondary: #f8f9fa;
+    --text-color: #212529;
+    --text-muted: #6c757d;
+    --border-color: #dee2e6;
+    --card-bg: #ffffff;
+    --card-shadow: rgba(0,0,0,0.1);
+    --navbar-bg: #343a40;
+    --navbar-text: #ffffff;
+    --input-bg: #ffffff;
+    --input-border: #ced4da;
+    --btn-primary-bg: #0d6efd;
+    --btn-success-bg: #198754;
+    --btn-danger-bg: #dc3545;
+    --btn-warning-bg: #ffc107;
+    --btn-info-bg: #0dcaf0;
+    --btn-secondary-bg: #6c757d;
+    --alert-info-bg: #d1ecf1;
+    --alert-info-border: #bee5eb;
+    --alert-info-text: #0c5460;
+    --table-hover-bg: #f8f9fa;
+}
+
+/* Темная тема */
+[data-theme="dark"] {
+    --bg-color: #1a1a1a;
+    --bg-secondary: #2d2d2d;
+    --text-color: #ffffff;
+    --text-muted: #adb5bd;
+    --border-color: #495057;
+    --card-bg: #2d2d2d;
+    --card-shadow: rgba(0,0,0,0.3);
+    --navbar-bg: #000000;
+    --navbar-text: #ffffff;
+    --input-bg: #3d3d3d;
+    --input-border: #495057;
+    --btn-primary-bg: #0d6efd;
+    --btn-success-bg: #198754;
+    --btn-danger-bg: #dc3545;
+    --btn-warning-bg: #ffc107;
+    --btn-info-bg: #0dcaf0;
+    --btn-secondary-bg: #6c757d;
+    --alert-info-bg: #1e3a40;
+    --alert-info-border: #2c5a61;
+    --alert-info-text: #7dd3fc;
+    --table-hover-bg: #3d3d3d;
+}
+
+/* Применение переменных */
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.navbar {
+    background-color: var(--navbar-bg) !important;
+}
+
+.navbar .navbar-brand,
+.navbar .nav-link {
+    color: var(--navbar-text) !important;
+}
+
+.card {
+    background-color: var(--card-bg);
+    border-color: var(--border-color);
+    box-shadow: 0 2px 4px var(--card-shadow);
+}
+
+.card-header {
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--border-color) 100%);
+    border-bottom-color: var(--border-color);
+    color: var(--text-color);
+}
+
+.form-control,
+.form-select {
+    background-color: var(--input-bg);
+    border-color: var(--input-border);
+    color: var(--text-color);
+}
+
+.form-control:focus,
+.form-select:focus {
+    background-color: var(--input-bg);
+    border-color: var(--btn-primary-bg);
+    color: var(--text-color);
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+.table {
+    color: var(--text-color);
+}
+
+.table-light {
+    background-color: var(--bg-secondary);
+    color: var(--text-color);
+}
+
+.table-hover tbody tr:hover {
+    background-color: var(--table-hover-bg);
+}
+
+.alert-info {
+    background-color: var(--alert-info-bg);
+    border-color: var(--alert-info-border);
+    color: var(--alert-info-text);
+}
+
+.text-muted {
+    color: var(--text-muted) !important;
+}
+
+.border {
+    border-color: var(--border-color) !important;
+}
+
+/* Кнопки остаются яркими в обеих темах */
+.btn-primary {
+    background-color: var(--btn-primary-bg);
+    border-color: var(--btn-primary-bg);
+}
+
+.btn-success {
+    background-color: var(--btn-success-bg);
+    border-color: var(--btn-success-bg);
+}
+
+.btn-danger {
+    background-color: var(--btn-danger-bg);
+    border-color: var(--btn-danger-bg);
+}
+
+.btn-warning {
+    background-color: var(--btn-warning-bg);
+    border-color: var(--btn-warning-bg);
+    color: #000;
+}
+
+.btn-info {
+    background-color: var(--btn-info-bg);
+    border-color: var(--btn-info-bg);
+    color: #000;
+}
+
+.btn-secondary {
+    background-color: var(--btn-secondary-bg);
+    border-color: var(--btn-secondary-bg);
+}
+
+/* Анимация переключения темы */
+* {
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+/* Стили для footer */
+footer {
+    background-color: var(--bg-secondary);
+    color: var(--text-muted);
+    border-top: 1px solid var(--border-color);
+}
+
+footer a {
+    color: var(--btn-primary-bg);
+}
+
+/* Стили для badge */
+.badge {
+    color: #fff;
+}
+
+.badge.bg-warning,
+.badge.bg-info {
+    color: #000 !important;
+}
+
+/* Стили для dropdown если есть */
+.dropdown-menu {
+    background-color: var(--card-bg);
+    border-color: var(--border-color);
+}
+
+.dropdown-item {
+    color: var(--text-color);
+}
+
+.dropdown-item:hover {
+    background-color: var(--table-hover-bg);
+    color: var(--text-color);
+}
+
+/* Анимация вращения для кнопки обновления */
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Стили для поиска пользователей */
+#userSearch:focus {
+    border-color: var(--btn-primary-bg);
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+.search-highlight {
+    background-color: #fff3cd;
+    padding: 2px 4px;
+    border-radius: 3px;
+}
+
+/* Центрированный контейнер с фиксированной шириной */
+.main-container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0 15px;
+}
+
+/* Стили для форм */
+.form-row {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+}
+
+.form-row .form-control,
+.form-row .form-select {
+    flex: 1;
+}
+
+.form-row .btn {
+    min-width: 120px;
+    white-space: nowrap;
+}
+
+/* Адаптивность для мобильных */
+@media (max-width: 768px) {
+    .theme-toggle {
+        bottom: 10px;
+        right: 10px;
+        width: 45px;
+        height: 45px;
+        font-size: 1rem;
+    }
+    
+    .main-container {
+        max-width: 100%;
+        padding: 0 10px;
+    }
+    
+    .form-row {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .form-row .btn {
+        width: 100%;
+    }
+}
