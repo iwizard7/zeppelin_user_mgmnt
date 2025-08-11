@@ -81,18 +81,36 @@ def get_system_info():
     zeppelin_info = detect_zeppelin_installation()
     
     if system == 'Darwin':  # macOS
-        return {
-            'os': 'macOS',
-            'service_manager': 'launchctl',
-            'demo_mode': True,
-            'zeppelin_type': 'demo',
-            'commands': {
-                'status': ['launchctl', 'list', 'org.apache.zeppelin'],
-                'start': ['launchctl', 'start', 'org.apache.zeppelin'],
-                'stop': ['launchctl', 'stop', 'org.apache.zeppelin'],
-                'restart': ['launchctl', 'kickstart', '-k', 'system/org.apache.zeppelin']
+        # Сначала проверяем, есть ли zeppelin-daemon.sh
+        if zeppelin_info['type'] == 'daemon':
+            daemon_path = zeppelin_info['path']
+            return {
+                'os': 'macOS',
+                'service_manager': 'zeppelin-daemon.sh',
+                'demo_mode': False,
+                'zeppelin_type': 'daemon',
+                'daemon_path': daemon_path,
+                'commands': {
+                    'status': [daemon_path, 'status'],
+                    'start': [daemon_path, 'start'],
+                    'stop': [daemon_path, 'stop'],
+                    'restart': [daemon_path, 'restart']
+                }
             }
-        }
+        else:
+            # Fallback к демо-режиму если daemon не найден
+            return {
+                'os': 'macOS',
+                'service_manager': 'launchctl',
+                'demo_mode': True,
+                'zeppelin_type': 'demo',
+                'commands': {
+                    'status': ['launchctl', 'list', 'org.apache.zeppelin'],
+                    'start': ['launchctl', 'start', 'org.apache.zeppelin'],
+                    'stop': ['launchctl', 'stop', 'org.apache.zeppelin'],
+                    'restart': ['launchctl', 'kickstart', '-k', 'system/org.apache.zeppelin']
+                }
+            }
     elif system == 'Linux':
         # Определяем дистрибутив Linux
         try:
@@ -1011,6 +1029,53 @@ def unassign_user_role():
     else:
         flash(f'Роль "{role}" не найдена у пользователя "{target_username}"', 'warning')
         log_user_action('UNASSIGN_ROLE_FAILED', current_user, f'Role "{role}" not found for user "{target_username}"')
+    
+    return redirect(url_for('dashboard'))
+
+
+@app.route('/change_password', methods=['POST'])
+@login_required
+def change_password():
+    """
+    Changes password for an existing user in the shiro.ini file.
+
+    Returns:
+        Response: Redirects to the dashboard.
+    """
+    target_username = request.form.get('username', '').strip()
+    new_password = request.form.get('new_password', '').strip()
+    current_user = session['username']
+    
+    if not target_username or not new_password:
+        flash('Не выбран пользователь или не указан новый пароль', 'error')
+        return redirect(url_for('dashboard'))
+    
+    # Защита от изменения пароля защищенных пользователей
+    if is_protected_user(target_username):
+        flash(f'Пароль пользователя {target_username} защищен от изменений', 'error')
+        log_user_action('CHANGE_PASSWORD_BLOCKED', current_user, f'Attempted to change password for protected user: {target_username}')
+        return redirect(url_for('dashboard'))
+    
+    # Валидация нового пароля
+    valid_password, password_msg = validate_input(new_password, 'Новый пароль', 3, 50)
+    if not valid_password:
+        flash(password_msg, 'error')
+        return redirect(url_for('dashboard'))
+    
+    users, roles, sections = read_shiro_ini()
+    
+    if target_username in users:
+        old_password = users[target_username]['password']
+        users[target_username]['password'] = new_password
+        
+        if write_shiro_ini(users, roles, sections):
+            flash(f'Пароль пользователя {target_username} успешно изменен', 'success')
+            log_user_action('CHANGE_PASSWORD', current_user, f'Changed password for user: {target_username}')
+        else:
+            log_user_action('CHANGE_PASSWORD_FAILED', current_user, f'Failed to change password for user: {target_username}')
+    else:
+        flash(f'Пользователь {target_username} не найден', 'warning')
+        log_user_action('CHANGE_PASSWORD_FAILED', current_user, f'User not found: {target_username}')
     
     return redirect(url_for('dashboard'))
 

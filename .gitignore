@@ -6,6 +6,11 @@ logs/
 # Резервные копии
 *.backup
 
+# Zeppelin файлы (если установлен локально)
+zeppelin-*/
+*.tgz
+*.tar.gz
+
 # Python
 __pycache__/
 *.py[cod]

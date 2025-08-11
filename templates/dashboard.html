@@ -205,6 +205,20 @@
                 onclick="return confirm('Вы уверены, что хотите удалить этого пользователя?')">Delete</button>
         </form>
 
+        <h5>Change User Password</h5>
+        <form action="{{ url_for('change_password') }}" method="POST" class="d-flex mb-3">
+            <select class="form-select me-2" name="username">
+                <option value="">Выберите пользователя</option>
+                {% for user, user_data in users.items() %}
+                    {% if not user_data.protected %}
+                        <option value="{{ user }}">{{ user }}</option>
+                    {% endif %}
+                {% endfor %}
+            </select>
+            <input type="password" class="form-control me-2" name="new_password" placeholder="Новый пароль" required>
+            <button type="submit" class="btn btn-info" onclick="return confirm('Вы уверены, что хотите изменить пароль этого пользователя?')">Change Password</button>
+        </form>
+
         <h5>Add New Role</h5>
         <form action="{{ url_for('add_role') }}" method="POST" class="d-flex">
             <input type="text" class="form-control me-2" name="role_name" placeholder="New Role Name" required>
