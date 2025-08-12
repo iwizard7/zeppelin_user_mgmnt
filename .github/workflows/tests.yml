@@ -57,7 +57,9 @@ jobs:
             """Test login page loads"""
             rv = client.get('/')
             assert rv.status_code == 200
-            assert b'Zeppelin User Management' in rv.data
+            assert b'Login' in rv.data
+            assert b'Username' in rv.data
+            assert b'Password' in rv.data
         
         def test_login_success(client):
             """Test successful login"""
@@ -74,6 +76,22 @@ jobs:
                 'password': 'wrong'
             })
             assert rv.status_code == 302  # Redirect back to login
+        
+        def test_dashboard_access_without_login(client):
+            """Test dashboard requires login"""
+            rv = client.get('/dashboard')
+            assert rv.status_code == 302  # Redirect to login
+        
+        def test_dashboard_with_login(client):
+            """Test dashboard loads after login"""
+            # Сначала логинимся
+            with client.session_transaction() as sess:
+                sess['username'] = 'admin'
+            
+            rv = client.get('/dashboard')
+            assert rv.status_code == 200
+            assert b'Zeppelin User Management' in rv.data
+            assert b'Dashboard' in rv.data
         EOF
         
         # Запускаем тесты

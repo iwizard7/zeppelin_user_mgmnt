@@ -55,3 +55,23 @@ Thumbs.db
 
 # Docker
 .dockerignore
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Documentation builds
+docs/_build/
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# Security
+*.pem
+*.key
+secrets.txt
