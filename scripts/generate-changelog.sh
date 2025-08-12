@@ -34,6 +34,53 @@ if [ -z "$COMMITS" ]; then
     exit 0
 fi
 
+# Функция для анализа изменений в файлах
+analyze_file_changes() {
+    local hash="$1"
+    local changes=""
+    
+    # Получаем список измененных файлов в коммите
+    local files=$(git show --name-only --format="" "$hash")
+    
+    # Анализируем типы файлов
+    if echo "$files" | grep -q "app\.py"; then
+        changes="${changes} Backend"
+    fi
+    if echo "$files" | grep -q "templates/"; then
+        changes="${changes} UI"
+    fi
+    if echo "$files" | grep -q "static/.*\.css"; then
+        changes="${changes} Styles"
+    fi
+    if echo "$files" | grep -q "static/.*\.js"; then
+        changes="${changes} JavaScript"
+    fi
+    if echo "$files" | grep -q "\.github/workflows/"; then
+        changes="${changes} CI/CD"
+    fi
+    if echo "$files" | grep -q "test"; then
+        changes="${changes} Tests"
+    fi
+    if echo "$files" | grep -q "\.md$"; then
+        changes="${changes} Docs"
+    fi
+    if echo "$files" | grep -q "requirements\.txt\|Dockerfile"; then
+        changes="${changes} Build"
+    fi
+    if echo "$files" | grep -q "\.sh$"; then
+        changes="${changes} Scripts"
+    fi
+    
+    echo "$changes"
+}
+
+# Функция для получения статистики коммита
+get_commit_stats() {
+    local hash="$1"
+    local stats=$(git show --stat --format="" "$hash" | tail -1)
+    echo "$stats"
+}
+
 # Функция для категоризации коммитов
 categorize_commits() {
     local commits="$1"
@@ -47,6 +94,9 @@ categorize_commits() {
     CI=""
     CHORES=""
     OTHERS=""
+    MANAGEMENT=""
+    WEBSOCKET=""
+    SECURITY=""
     
     while IFS= read -r commit; do
         if [ -z "$commit" ]; then continue; fi
@@ -55,45 +105,64 @@ categorize_commits() {
         HASH=$(echo "$commit" | awk '{print $1}')
         MESSAGE=$(echo "$commit" | cut -d' ' -f2-)
         
+        # Получаем дополнительную информацию
+        FILE_CHANGES=$(analyze_file_changes "$HASH")
+        COMMIT_STATS=$(get_commit_stats "$HASH")
+        
+        # Создаем расширенное описание
+        EXTENDED_MESSAGE="$MESSAGE"
+        if [ -n "$FILE_CHANGES" ]; then
+            EXTENDED_MESSAGE="$MESSAGE [$FILE_CHANGES]"
+        fi
+        if [ -n "$COMMIT_STATS" ]; then
+            EXTENDED_MESSAGE="$EXTENDED_MESSAGE ($COMMIT_STATS)"
+        fi
+        
         # Категоризируем по префиксу
         case "$MESSAGE" in
             feat:*|feature:*)
-                FEATURES="${FEATURES}\n- ${MESSAGE#*: } (${HASH})"
+                FEATURES="${FEATURES}\n- ${EXTENDED_MESSAGE#*: } \`${HASH}\`"
                 ;;
             fix:*|bugfix:*)
-                FIXES="${FIXES}\n- ${MESSAGE#*: } (${HASH})"
+                FIXES="${FIXES}\n- ${EXTENDED_MESSAGE#*: } \`${HASH}\`"
                 ;;
             style:*|ui:*|ux:*)
-                STYLES="${STYLES}\n- ${MESSAGE#*: } (${HASH})"
+                STYLES="${STYLES}\n- ${EXTENDED_MESSAGE#*: } \`${HASH}\`"
                 ;;
             docs:*|doc:*)
-                DOCS="${DOCS}\n- ${MESSAGE#*: } (${HASH})"
+                DOCS="${DOCS}\n- ${EXTENDED_MESSAGE#*: } \`${HASH}\`"
                 ;;
             test:*|tests:*)
-                TESTS="${TESTS}\n- ${MESSAGE#*: } (${HASH})"
+                TESTS="${TESTS}\n- ${EXTENDED_MESSAGE#*: } \`${HASH}\`"
                 ;;
             ci:*|build:*)
-                CI="${CI}\n- ${MESSAGE#*: } (${HASH})"
+                CI="${CI}\n- ${EXTENDED_MESSAGE#*: } \`${HASH}\`"
                 ;;
             chore:*|refactor:*)
-                CHORES="${CHORES}\n- ${MESSAGE#*: } (${HASH})"
+                CHORES="${CHORES}\n- ${EXTENDED_MESSAGE#*: } \`${HASH}\`"
                 ;;
             *)
                 # Пытаемся угадать по содержимому
-                if echo "$MESSAGE" | grep -qi "fix\|bug\|error"; then
-                    FIXES="${FIXES}\n- ${MESSAGE} (${HASH})"
-                elif echo "$MESSAGE" | grep -qi "add\|new\|feature\|implement"; then
-                    FEATURES="${FEATURES}\n- ${MESSAGE} (${HASH})"
-                elif echo "$MESSAGE" | grep -qi "style\|css\|ui\|ux\|design"; then
-                    STYLES="${STYLES}\n- ${MESSAGE} (${HASH})"
-                elif echo "$MESSAGE" | grep -qi "doc\|readme\|guide"; then
-                    DOCS="${DOCS}\n- ${MESSAGE} (${HASH})"
-                elif echo "$MESSAGE" | grep -qi "test"; then
-                    TESTS="${TESTS}\n- ${MESSAGE} (${HASH})"
-                elif echo "$MESSAGE" | grep -qi "workflow\|ci\|build"; then
-                    CI="${CI}\n- ${MESSAGE} (${HASH})"
+                if echo "$MESSAGE" | grep -qi "websocket\|socket\.io\|live.update"; then
+                    WEBSOCKET="${WEBSOCKET}\n- ${EXTENDED_MESSAGE} \`${HASH}\`"
+                elif echo "$MESSAGE" | grep -qi "start_app\|stop_app\|status_app\|управление"; then
+                    MANAGEMENT="${MANAGEMENT}\n- ${EXTENDED_MESSAGE} \`${HASH}\`"
+                elif echo "$MESSAGE" | grep -qi "security\|auth\|session\|login"; then
+                    SECURITY="${SECURITY}\n- ${EXTENDED_MESSAGE} \`${HASH}\`"
+                elif echo "$MESSAGE" | grep -qi "fix\|bug\|error\|исправ"; then
+                    FIXES="${FIXES}\n- ${EXTENDED_MESSAGE} \`${HASH}\`"
+                elif echo "$MESSAGE" | grep -qi "add\|new\|feature\|implement\|добав\|новый"; then
+                    FEATURES="${FEATURES}\n- ${EXTENDED_MESSAGE} \`${HASH}\`"
+                elif echo "$MESSAGE" | grep -qi "style\|css\|ui\|ux\|design\|theme\|стил"; then
+                    STYLES="${STYLES}\n- ${EXTENDED_MESSAGE} \`${HASH}\`"
+                elif echo "$MESSAGE" | grep -qi "doc\|readme\|guide\|документ"; then
+                    DOCS="${DOCS}\n- ${EXTENDED_MESSAGE} \`${HASH}\`"
+                elif echo "$MESSAGE" | grep -qi "test\|тест"; then
+                    TESTS="${TESTS}\n- ${EXTENDED_MESSAGE} \`${HASH}\`"
+                elif echo "$MESSAGE" | grep -qi "workflow\|ci\|build\|github.action"; then
+                    CI="${CI}\n- ${EXTENDED_MESSAGE} \`${HASH}\`"
                 else
-                    OTHERS="${OTHERS}\n- ${MESSAGE} (${HASH})"
+                    OTHERS="${OTHERS}\n- ${EXTENDED_MESSAGE} \`${HASH}\`"
                 fi
                 ;;
         esac
@@ -118,6 +187,27 @@ if [ -n "$FEATURES" ]; then
 
 ### ✨ Новые возможности
 ${FEATURES}"
+fi
+
+if [ -n "$WEBSOCKET" ]; then
+    CHANGELOG_CONTENT="${CHANGELOG_CONTENT}
+
+### ⚡ WebSocket и Live Updates
+${WEBSOCKET}"
+fi
+
+if [ -n "$MANAGEMENT" ]; then
+    CHANGELOG_CONTENT="${CHANGELOG_CONTENT}
+
+### 🎛️ Управление приложением
+${MANAGEMENT}"
+fi
+
+if [ -n "$SECURITY" ]; then
+    CHANGELOG_CONTENT="${CHANGELOG_CONTENT}
+
+### 🔒 Безопасность и аутентификация
+${SECURITY}"
 fi
 
 if [ -n "$FIXES" ]; then
@@ -169,14 +259,49 @@ if [ -n "$OTHERS" ]; then
 ${OTHERS}"
 fi
 
-# Добавляем статистику
+# Добавляем детальную статистику
 COMMIT_COUNT=$(echo "$COMMITS" | wc -l)
+
+# Подсчитываем изменения по категориям
+FEATURE_COUNT=$(echo -e "$FEATURES" | grep -c "^-" 2>/dev/null || echo "0")
+FIX_COUNT=$(echo -e "$FIXES" | grep -c "^-" 2>/dev/null || echo "0")
+STYLE_COUNT=$(echo -e "$STYLES" | grep -c "^-" 2>/dev/null || echo "0")
+DOC_COUNT=$(echo -e "$DOCS" | grep -c "^-" 2>/dev/null || echo "0")
+TEST_COUNT=$(echo -e "$TESTS" | grep -c "^-" 2>/dev/null || echo "0")
+CI_COUNT=$(echo -e "$CI" | grep -c "^-" 2>/dev/null || echo "0")
+WEBSOCKET_COUNT=$(echo -e "$WEBSOCKET" | grep -c "^-" 2>/dev/null || echo "0")
+MANAGEMENT_COUNT=$(echo -e "$MANAGEMENT" | grep -c "^-" 2>/dev/null || echo "0")
+
+# Получаем статистику изменений кода
+if git describe --tags --abbrev=0 >/dev/null 2>&1; then
+    CODE_STATS=$(git diff --stat ${CURRENT_VERSION}..HEAD | tail -1)
+else
+    CODE_STATS=$(git log --stat --oneline | tail -1)
+fi
+
 CHANGELOG_CONTENT="${CHANGELOG_CONTENT}
 
-### 📊 Статистика
-- **Коммитов**: ${COMMIT_COUNT}
-- **Дата релиза**: $(date +%Y-%m-%d)
+### 📊 Статистика релиза
+- **Общее количество коммитов**: ${COMMIT_COUNT}
+- **Новые возможности**: ${FEATURE_COUNT}
+- **Исправления**: ${FIX_COUNT}
+- **UI/UX улучшения**: ${STYLE_COUNT}
+- **WebSocket функции**: ${WEBSOCKET_COUNT}
+- **Управление приложением**: ${MANAGEMENT_COUNT}
+- **Документация**: ${DOC_COUNT}
+- **Тесты**: ${TEST_COUNT}
+- **CI/CD**: ${CI_COUNT}
+
+### 📈 Изменения в коде
+\`\`\`
+${CODE_STATS}
+\`\`\`
+
+### 🏷️ Информация о релизе
 - **Версия**: ${NEW_VERSION}
+- **Дата релиза**: $(date +%Y-%m-%d)
+- **Время релиза**: $(date +%H:%M:%S)
+- **Предыдущая версия**: ${CURRENT_VERSION}
 
 ---
 "

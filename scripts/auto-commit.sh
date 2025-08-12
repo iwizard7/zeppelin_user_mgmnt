@@ -102,49 +102,133 @@ get_commit_description() {
     esac
 }
 
+# Функция для анализа изменений в коде
+analyze_code_changes() {
+    local files="$1"
+    local changes=""
+    
+    # Анализируем изменения в Python коде
+    if echo "$files" | grep -q "app\.py"; then
+        # Проверяем добавленные строки в app.py
+        if git diff --cached app.py | grep -q "socketio\|WebSocket"; then
+            changes="${changes}\n- WebSocket функциональность"
+        fi
+        if git diff --cached app.py | grep -q "session\|Session"; then
+            changes="${changes}\n- Управление сессиями"
+        fi
+        if git diff --cached app.py | grep -q "def.*user\|def.*role"; then
+            changes="${changes}\n- Управление пользователями и ролями"
+        fi
+        if git diff --cached app.py | grep -q "zeppelin\|Zeppelin"; then
+            changes="${changes}\n- Интеграция с Zeppelin"
+        fi
+        if git diff --cached app.py | grep -q "log\|Log"; then
+            changes="${changes}\n- Система логирования"
+        fi
+    fi
+    
+    # Анализируем изменения в templates
+    if echo "$files" | grep -q "templates/"; then
+        if git diff --cached templates/ | grep -q "theme\|Theme"; then
+            changes="${changes}\n- Система тем в UI"
+        fi
+        if git diff --cached templates/ | grep -q "search\|Search"; then
+            changes="${changes}\n- Поиск и фильтрация"
+        fi
+        if git diff --cached templates/ | grep -q "toast\|Toast"; then
+            changes="${changes}\n- Toast уведомления"
+        fi
+        if git diff --cached templates/ | grep -q "websocket\|WebSocket"; then
+            changes="${changes}\n- WebSocket интеграция в UI"
+        fi
+    fi
+    
+    # Анализируем изменения в CSS/JS
+    if echo "$files" | grep -q "static/"; then
+        if git diff --cached static/ | grep -q "animation\|transition"; then
+            changes="${changes}\n- Анимации и переходы"
+        fi
+        if git diff --cached static/ | grep -q "dark\|light\|theme"; then
+            changes="${changes}\n- Темная/светлая тема"
+        fi
+        if git diff --cached static/ | grep -q "hover\|focus"; then
+            changes="${changes}\n- Интерактивные эффекты"
+        fi
+    fi
+    
+    echo -e "$changes"
+}
+
 # Функция для создания детального описания
 get_detailed_description() {
     local files="$1"
     local details=""
     
-    # Анализируем конкретные изменения
+    # Анализируем конкретные изменения по файлам
     if echo "$files" | grep -q "favicon"; then
-        details="${details}\n- Добавлен favicon и улучшен брендинг"
+        details="${details}\n- 🚀 Добавлен кастомный favicon с ракетой"
+    fi
+    
+    if echo "$files" | grep -q "start_app\.sh\|stop_app\.sh\|status_app\.sh\|restart_app\.sh"; then
+        details="${details}\n- 🎛️ Добавлены скрипты управления приложением"
     fi
     
     if echo "$files" | grep -q "toast\|Toast"; then
-        details="${details}\n- Добавлены toast уведомления"
+        details="${details}\n- 📢 Добавлены современные toast уведомления"
     fi
     
     if echo "$files" | grep -q "theme"; then
-        details="${details}\n- Улучшения системы тем"
+        details="${details}\n- 🌙 Улучшения системы тем (dark/light mode)"
     fi
     
     if echo "$files" | grep -q "search\|Search"; then
-        details="${details}\n- Улучшения поиска и фильтрации"
+        details="${details}\n- 🔍 Улучшения поиска и фильтрации пользователей"
     fi
     
     if echo "$files" | grep -q "login"; then
-        details="${details}\n- Улучшения формы входа"
+        details="${details}\n- 🔐 Улучшения формы входа и аутентификации"
     fi
     
     if echo "$files" | grep -q "dashboard"; then
-        details="${details}\n- Обновления dashboard"
+        details="${details}\n- 📊 Обновления dashboard и основного интерфейса"
     fi
     
     if echo "$files" | grep -q "workflow"; then
-        details="${details}\n- Обновления GitHub Actions"
+        details="${details}\n- 🤖 Обновления GitHub Actions и CI/CD"
     fi
     
     if echo "$files" | grep -q "test"; then
-        details="${details}\n- Обновления тестов"
+        details="${details}\n- 🧪 Обновления автоматических тестов"
     fi
     
     if echo "$files" | grep -q "\.md$"; then
-        details="${details}\n- Обновление документации"
+        details="${details}\n- 📚 Обновление документации и руководств"
+    fi
+    
+    if echo "$files" | grep -q "requirements\.txt"; then
+        details="${details}\n- 📦 Обновление зависимостей Python"
+    fi
+    
+    if echo "$files" | grep -q "Dockerfile\|docker-compose"; then
+        details="${details}\n- 🐳 Обновление Docker конфигурации"
+    fi
+    
+    # Добавляем анализ изменений в коде
+    local code_changes=$(analyze_code_changes "$files")
+    if [ -n "$code_changes" ]; then
+        details="${details}\n\n🔧 Изменения в коде:${code_changes}"
     fi
     
     echo -e "$details"
+}
+
+# Функция для получения статистики изменений
+get_change_stats() {
+    local added_lines=$(git diff --cached --numstat | awk '{sum += $1} END {print sum}')
+    local deleted_lines=$(git diff --cached --numstat | awk '{sum += $2} END {print sum}')
+    local modified_files=$(git diff --cached --name-only | wc -l)
+    
+    echo "📊 Статистика: +${added_lines:-0} -${deleted_lines:-0} строк в ${modified_files} файлах"
 }
 
 # Определяем тип коммита
@@ -162,11 +246,29 @@ if [ -n "$DETAILED_DESCRIPTION" ]; then
 ${DETAILED_DESCRIPTION}"
 fi
 
-# Добавляем информацию о файлах
-FILE_COUNT=$(echo "$CHANGED_FILES" | wc -l)
+# Добавляем статистику изменений
+CHANGE_STATS=$(get_change_stats)
 COMMIT_MESSAGE="${COMMIT_MESSAGE}
 
+${CHANGE_STATS}"
+
+# Добавляем список измененных файлов если их немного
+FILE_COUNT=$(echo "$CHANGED_FILES" | wc -l)
+if [ "$FILE_COUNT" -le 10 ]; then
+    COMMIT_MESSAGE="${COMMIT_MESSAGE}
+
+📁 Измененные файлы:"
+    echo "$CHANGED_FILES" | while read file; do
+        if [ -n "$file" ]; then
+            COMMIT_MESSAGE="${COMMIT_MESSAGE}
+- $file"
+        fi
+    done
+else
+    COMMIT_MESSAGE="${COMMIT_MESSAGE}
+
 📁 Изменено файлов: ${FILE_COUNT}"
+fi
 
 echo -e "${GREEN}📝 Сгенерированное commit сообщение:${NC}"
 echo -e "${YELLOW}${COMMIT_MESSAGE}${NC}"
