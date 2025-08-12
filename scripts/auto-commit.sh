@@ -12,7 +12,25 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Функция для проверки git remote
+check_git_remote() {
+    if ! git remote >/dev/null 2>&1; then
+        echo -e "${RED}❌ Не найден git remote!${NC}"
+        echo -e "${YELLOW}💡 Настройте remote командой:${NC}"
+        echo -e "${YELLOW}   git remote add origin https://github.com/username/repo.git${NC}"
+        return 1
+    fi
+    
+    local remote_name=$(git remote | head -1)
+    local remote_url=$(git remote get-url "$remote_name" 2>/dev/null || echo "неизвестно")
+    echo -e "${BLUE}📡 Git remote: ${remote_name} (${remote_url})${NC}"
+    return 0
+}
+
 echo -e "${BLUE}🤖 Автоматический анализ изменений...${NC}"
+
+# Проверяем git remote (только если планируем push)
+check_git_remote || echo -e "${YELLOW}⚠️ Git remote не настроен, push будет недоступен${NC}"
 
 # Проверяем есть ли изменения
 if [ -z "$(git status --porcelain)" ]; then
@@ -289,8 +307,22 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     read -p "🚀 Отправить изменения в GitHub? (y/N): " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        git push
-        echo -e "${GREEN}🎉 Изменения отправлены в GitHub!${NC}"
+        # Проверяем наличие remote
+        if ! git remote | head -1 >/dev/null 2>&1; then
+            echo -e "${RED}❌ Не найден git remote!${NC}"
+            echo -e "${YELLOW}💡 Настройте remote: git remote add origin <URL>${NC}"
+            exit 1
+        fi
+        
+        REMOTE_NAME=$(git remote | head -1)
+        echo -e "${BLUE}📡 Отправляем в remote: ${REMOTE_NAME}${NC}"
+        
+        if git push; then
+            echo -e "${GREEN}🎉 Изменения отправлены в GitHub!${NC}"
+        else
+            echo -e "${RED}❌ Ошибка отправки изменений${NC}"
+            echo -e "${YELLOW}💡 Проверьте настройки remote и права доступа${NC}"
+        fi
     fi
 else
     echo -e "${YELLOW}❌ Коммит отменен${NC}"

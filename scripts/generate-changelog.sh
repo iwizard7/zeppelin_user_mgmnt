@@ -12,7 +12,27 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# Функция для проверки git remote
+check_git_remote() {
+    if ! git remote >/dev/null 2>&1; then
+        echo -e "${RED}❌ Не найден git remote!${NC}"
+        echo -e "${YELLOW}💡 Настройте remote командой:${NC}"
+        echo -e "${YELLOW}   git remote add origin https://github.com/username/repo.git${NC}"
+        return 1
+    fi
+    
+    local remote_name=$(git remote | head -1)
+    local remote_url=$(git remote get-url "$remote_name" 2>/dev/null || echo "неизвестно")
+    echo -e "${BLUE}📡 Git remote: ${remote_name} (${remote_url})${NC}"
+    return 0
+}
+
 echo -e "${BLUE}📋 Генерация CHANGELOG...${NC}"
+
+# Проверяем git remote
+if ! check_git_remote; then
+    exit 1
+fi
 
 # Получаем текущую версию
 CURRENT_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.1.0")
@@ -335,7 +355,20 @@ $(echo -e "$CHANGELOG_CONTENT" | head -20)"
     read -p "🚀 Отправить тег в GitHub? (y/N): " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        git push origin "$NEW_VERSION"
-        echo -e "${GREEN}🎉 Тег отправлен! GitHub Release будет создан автоматически.${NC}"
+        # Определяем правильный remote
+        REMOTE_NAME=$(git remote | head -1)
+        if [ -z "$REMOTE_NAME" ]; then
+            echo -e "${RED}❌ Не найден git remote!${NC}"
+            exit 1
+        fi
+        
+        echo -e "${BLUE}📡 Отправляем тег в remote: ${REMOTE_NAME}${NC}"
+        
+        if git push "$REMOTE_NAME" "$NEW_VERSION"; then
+            echo -e "${GREEN}🎉 Тег отправлен! GitHub Release будет создан автоматически.${NC}"
+        else
+            echo -e "${RED}❌ Ошибка отправки тега${NC}"
+            echo -e "${YELLOW}💡 Попробуйте отправить вручную: git push ${REMOTE_NAME} ${NEW_VERSION}${NC}"
+        fi
     fi
 fi
