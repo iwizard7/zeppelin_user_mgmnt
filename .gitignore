@@ -75,3 +75,9 @@ docs/_build/
 *.pem
 *.key
 secrets.txt
+
+# Documentation (exclude all .md files except README)
+*.md
+!Readme.MD
+!README.md
+!readme.md

@@ -18,7 +18,7 @@ jobs:
         fetch-depth: 0
     
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
     
@@ -30,7 +30,7 @@ jobs:
     - name: Create distribution
       run: |
         # Создаем архив с исходным кодом
-        tar -czf zeppelin-user-management-${GITHUB_REF#refs/tags/}.tar.gz \
+        tar -czf zeppelin-user-management-${{ github.ref_name }}.tar.gz \
           --exclude='.git*' \
           --exclude='__pycache__' \
           --exclude='*.pyc' \
@@ -43,21 +43,21 @@ jobs:
       run: |
         # Простой changelog из коммитов
         echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
-        echo "## Changes in ${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        echo "## Changes in ${{ github.ref_name }}" >> $GITHUB_OUTPUT
         echo "" >> $GITHUB_OUTPUT
-        git log --pretty=format:"- %s" $(git describe --tags --abbrev=0 HEAD^)..HEAD >> $GITHUB_OUTPUT
+        git log --pretty=format:"- %s" $(git describe --tags --abbrev=0 HEAD^)..HEAD >> $GITHUB_OUTPUT 2>/dev/null || echo "- Initial release" >> $GITHUB_OUTPUT
         echo "" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
     
     - name: Create Release
-      uses: actions/create-release@v1
+      uses: softprops/action-gh-release@v2
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
+        tag_name: ${{ github.ref_name }}
+        name: Release ${{ github.ref_name }}
         body: |
-          # Zeppelin User Management ${{ github.ref }}
+          # Zeppelin User Management ${{ github.ref_name }}
           
           ## 🚀 Features
           - Modern web interface for Apache Zeppelin user management
@@ -70,7 +70,7 @@ jobs:
           
           ### Docker (Recommended)
           ```bash
-          docker run -d -p 8080:5000 ghcr.io/iwizard7/zeppelin_user_mgmnt:${{ github.ref }}
+          docker run -d -p 8080:5000 ghcr.io/iwizard7/zeppelin_user_mgmnt:${{ github.ref_name }}
           ```
           
           ### Manual Installation
@@ -85,15 +85,7 @@ jobs:
           - [Documentation](https://github.com/iwizard7/zeppelin_user_mgmnt#readme)
           - [Docker Image](https://ghcr.io/iwizard7/zeppelin_user_mgmnt)
           - [Issues](https://github.com/iwizard7/zeppelin_user_mgmnt/issues)
+        files: |
+          zeppelin-user-management-${{ github.ref_name }}.tar.gz
         draft: false
         prerelease: false
-    
-    - name: Upload Release Asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./zeppelin-user-management-${{ github.ref }}.tar.gz
-        asset_name: zeppelin-user-management-${{ github.ref }}.tar.gz
-        asset_content_type: application/gzip
