@@ -45,17 +45,30 @@ jobs:
           type=semver,pattern={{major}}.{{minor}}
           type=raw,value=latest,enable={{is_default_branch}}
     
-    - name: Build and push Docker image
+    - name: Build Docker image for testing
+      if: github.event_name == 'pull_request'
       uses: docker/build-push-action@v5
       with:
         context: .
-        platforms: linux/amd64,linux/arm64
-        push: ${{ github.event_name != 'pull_request' }}
+        platforms: linux/amd64
+        push: false
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
         load: true  # Загружаем образ локально для тестирования
+    
+    - name: Build and push Docker image (multi-platform)
+      if: github.event_name != 'pull_request'
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
     
     - name: Test Docker image
       run: |
@@ -88,7 +101,7 @@ jobs:
             exit 1
           fi
         else
-          echo "⚠️ Docker image not found locally (this is expected for PR builds)"
+          echo "⚠️ Docker image not found locally"
+          echo "ℹ️ This is expected for multi-platform builds (main/master branch)"
           echo "✅ Skipping container test"
         fi
-      if: github.event_name != 'pull_request'
