@@ -321,7 +321,7 @@
                             <option value="{{ role }}">{{ role }}</option>
                             {% endfor %}
                         </select>
-                        <button type="submit" class="btn btn-warning">Удалить</button>
+                        <button type="submit" class="btn btn-danger">Удалить</button>
                     </form>
                 </div>
             </div>
@@ -377,7 +377,7 @@
                 <div class="card-body">
                     <form action="{{ url_for('add_role') }}" method="POST" class="form-row">
                         <input type="text" class="form-control" name="role_name" placeholder="Название новой роли" required>
-                        <button type="submit" class="btn btn-secondary">Добавить</button>
+                        <button type="submit" class="btn btn-success">Добавить</button>
                     </form>
                 </div>
             </div>
