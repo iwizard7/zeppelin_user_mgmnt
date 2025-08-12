@@ -1,3 +1,5 @@
+[![Pylint](https://github.com/iwizard7/zeppelin_user_mgmnt/actions/workflows/pylint.yml/badge.svg)](https://github.com/iwizard7/zeppelin_user_mgmnt/actions/workflows/pylint.yml)
+
 # 🚀 Управление пользователями и мониторинг Zeppelin
 
 ## 📋 Обзор
