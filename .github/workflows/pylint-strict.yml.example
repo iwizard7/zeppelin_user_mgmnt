@@ -1,0 +1,63 @@
+name: Pylint Strict
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pylint
+        pip install -r requirements.txt
+    
+    - name: Create strict pylint configuration
+      run: |
+        cat > .pylintrc << EOF
+        [MASTER]
+        # Более строгие настройки для высокого качества кода
+        disable=
+            missing-module-docstring,
+            line-too-long
+        
+        [FORMAT]
+        max-line-length=120
+        
+        [VARIABLES]
+        good-names=i,j,k,ex,Run,_,e,f,fd,app
+        
+        [DESIGN]
+        max-args=7
+        max-locals=15
+        max-returns=6
+        max-branches=12
+        max-statements=50
+        
+        [BASIC]
+        # Хорошие имена для констант
+        const-rgx=(([A-Z_][A-Z0-9_]*)|(__.*__))$
+        EOF
+    
+    - name: Analysing the code with pylint (strict)
+      run: |
+        pylint app.py --fail-under=8.0
+        
+    - name: Generate detailed report
+      if: failure()
+      run: |
+        echo "## Pylint Failed - Detailed Report" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        pylint app.py --exit-zero --output-format=text >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
