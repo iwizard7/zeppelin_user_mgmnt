@@ -4,7 +4,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard</title>
+    <meta name="description" content="Dashboard for Apache Zeppelin user management with real-time monitoring, dark/light themes, and advanced search">
+    <meta name="author" content="iwizard7">
+    <meta name="theme-color" content="#0d6efd">
+    <title>🚀 Zeppelin User Management - Dashboard</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="alternate icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="{{ url_for('static', filename='themes.css') }}" rel="stylesheet">
     <style>
@@ -55,6 +60,75 @@
         [data-theme="dark"] .table-hover>tbody>tr:hover>* {
             --bs-table-bg: var(--table-hover-bg);
         }
+        
+        /* UX улучшения */
+        .btn {
+            transition: all 0.2s ease;
+        }
+        
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .form-control:focus {
+            transform: scale(1.02);
+            transition: transform 0.2s ease;
+        }
+        
+        .card {
+            transition: all 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px var(--card-shadow);
+        }
+        
+        /* Анимация для счетчика пользователей */
+        #userCount {
+            transition: all 0.3s ease;
+        }
+        
+        #userCount.updated {
+            color: #0d6efd;
+            font-weight: bold;
+            transform: scale(1.1);
+        }
+        
+        /* Пульсация для кнопки обновления */
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        .btn-pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        /* Улучшенные toast'ы */
+        .toast {
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+        }
+        
+        /* Smooth scroll */
+        html {
+            scroll-behavior: smooth;
+        }
+        
+        /* Улучшенный focus для accessibility */
+        .btn:focus,
+        .form-control:focus,
+        .form-select:focus {
+            outline: 2px solid #0d6efd;
+            outline-offset: 2px;
+        }
     </style>
 </head>
 
@@ -73,7 +147,7 @@
                     👤 {{ session.username }}
                     <small class="text-muted">| Сессия активна</small>
                 </span>
-                <a class="nav-link" href="{{ url_for('logout') }}">
+                <a class="nav-link" href="{{ url_for('logout') }}" onclick="sessionStorage.removeItem('welcomeShown')">
                     <button class="btn btn-outline-light btn-sm">Выйти</button>
                 </a>
             </div>
@@ -102,8 +176,9 @@
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h6 class="mb-0">📊 Статус сервиса Zeppelin</h6>
                     <div>
-                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="refreshStatus()">
-                            <span id="refresh-icon">🔄</span> Обновить
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="refreshStatus()" id="refreshBtn">
+                            <span id="refresh-icon">🔄</span> 
+                            <span class="btn-text">Обновить</span>
                         </button>
                         <form action="{{ url_for('start_zeppelin') }}" method="POST" class="d-inline">
                             <button type="submit" class="btn btn-sm btn-success"
@@ -387,6 +462,11 @@
         </div>
     </div>
 
+    <!-- Toast контейнер для уведомлений -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer">
+        <!-- Toasts будут добавляться динамически -->
+    </div>
+    
     <footer class="text-center py-3 mt-4">
         &copy; iwizard7 | <a href="https://github.com/iwizard7/zeppelin_user_mgmnt" target="_blank">GitHub
             Repository</a>
@@ -657,6 +737,129 @@
         });
 
         console.log('✅ JavaScript загружен');
+        
+        // UX улучшения
+        
+        // Функция для показа toast уведомлений
+        function showToast(message, type = 'info', duration = 3000) {
+            const toastContainer = document.getElementById('toastContainer');
+            const toastId = 'toast-' + Date.now();
+            
+            const toastHtml = `
+                <div class="toast align-items-center text-bg-${type} border-0" role="alert" aria-live="assertive" aria-atomic="true" id="${toastId}">
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            ${message}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                </div>
+            `;
+            
+            toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+            const toastElement = document.getElementById(toastId);
+            const toast = new bootstrap.Toast(toastElement, { delay: duration });
+            toast.show();
+            
+            // Удаляем toast после скрытия
+            toastElement.addEventListener('hidden.bs.toast', () => {
+                toastElement.remove();
+            });
+        }
+        
+        // Улучшенная функция обновления статуса
+        const originalRefreshStatus = window.refreshStatus;
+        window.refreshStatus = function() {
+            const refreshBtn = document.getElementById('refreshBtn');
+            const refreshIcon = document.getElementById('refresh-icon');
+            const btnText = refreshBtn.querySelector('.btn-text');
+            
+            // Показываем loading состояние
+            refreshBtn.disabled = true;
+            refreshIcon.style.animation = 'spin 1s linear infinite';
+            btnText.textContent = 'Обновляем...';
+            
+            // Вызываем оригинальную функцию
+            originalRefreshStatus();
+            
+            // Восстанавливаем состояние через 2 секунды
+            setTimeout(() => {
+                refreshBtn.disabled = false;
+                refreshIcon.style.animation = '';
+                btnText.textContent = 'Обновить';
+            }, 2000);
+        };
+        
+        // Подтверждения для критических действий
+        const criticalForms = document.querySelectorAll('form[action*="delete"], form[action*="stop"], form[action*="restart"]');
+        criticalForms.forEach(form => {
+            form.addEventListener('submit', function(e) {
+                const action = this.action.split('/').pop();
+                const actionNames = {
+                    'delete_user': 'удалить пользователя',
+                    'stop_zeppelin': 'остановить Zeppelin',
+                    'restart_zeppelin': 'перезапустить Zeppelin'
+                };
+                
+                const actionName = actionNames[action] || 'выполнить действие';
+                if (!confirm(`⚠️ Вы уверены, что хотите ${actionName}?`)) {
+                    e.preventDefault();
+                }
+            });
+        });
+        
+        // Автосохранение темы при переключении
+        const originalToggleTheme = window.toggleTheme;
+        window.toggleTheme = function() {
+            originalToggleTheme();
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            showToast(`🎨 Тема переключена на ${currentTheme === 'dark' ? 'темную' : 'светлую'}`, 'info', 2000);
+        };
+        
+        // Улучшение поиска с debounce
+        let searchTimeout;
+        const userSearch = document.getElementById('userSearch');
+        if (userSearch) {
+            userSearch.addEventListener('input', function() {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    filterUsers();
+                    const count = document.getElementById('userCount').textContent;
+                    if (this.value) {
+                        showToast(`🔍 Найдено: ${count} пользователей`, 'info', 1500);
+                    }
+                }, 300);
+            });
+        }
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            // Ctrl/Cmd + K для фокуса на поиске
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                e.preventDefault();
+                const searchField = document.getElementById('userSearch');
+                if (searchField) {
+                    searchField.focus();
+                    searchField.select();
+                    showToast('🔍 Поиск активирован', 'info', 1000);
+                }
+            }
+            
+            // Ctrl/Cmd + T для переключения темы
+            if ((e.ctrlKey || e.metaKey) && e.key === 't') {
+                e.preventDefault();
+                toggleTheme();
+            }
+        });
+        
+        // Показываем приветственное сообщение только при первом входе
+        const hasShownWelcome = sessionStorage.getItem('welcomeShown');
+        if (!hasShownWelcome) {
+            setTimeout(() => {
+                showToast('👋 Добро пожаловать в Zeppelin User Management!', 'primary', 4000);
+                sessionStorage.setItem('welcomeShown', 'true');
+            }, 1000);
+        }
     </script>
 </body>
 

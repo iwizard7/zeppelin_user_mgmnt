@@ -4,7 +4,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login</title>
+    <meta name="description" content="Modern web interface for Apache Zeppelin user management with real-time monitoring and advanced features">
+    <meta name="author" content="iwizard7">
+    <meta name="theme-color" content="#0d6efd">
+    <title>🚀 Zeppelin User Management - Login</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="alternate icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="{{ url_for('static', filename='themes.css') }}" rel="stylesheet">
     <style>
@@ -41,20 +46,62 @@
         {% endif %}
         {% endwith %}
 
-        <form action="{{ url_for('login') }}" method="POST">
+        <form action="{{ url_for('login') }}" method="POST" id="loginForm">
             <div class="mb-3">
-                <label for="username" class="form-label">Username</label>
-                <input type="text" class="form-control" id="username" name="username" required>
+                <label for="username" class="form-label">👤 Username</label>
+                <input type="text" class="form-control" id="username" name="username" required 
+                       autocomplete="username" placeholder="Enter your username">
             </div>
             <div class="mb-3">
-                <label for="password" class="form-label">Password</label>
-                <input type="password" class="form-control" id="password" name="password" required>
+                <label for="password" class="form-label">🔒 Password</label>
+                <input type="password" class="form-control" id="password" name="password" required 
+                       autocomplete="current-password" placeholder="Enter your password">
             </div>
-            <button type="submit" class="btn btn-primary w-100">Login</button>
+            <button type="submit" class="btn btn-primary w-100" id="loginBtn">
+                <span class="btn-text">🚀 Login</span>
+                <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+            </button>
         </form>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{{ url_for('static', filename='theme-toggle.js') }}"></script>
+    
+    <script>
+        // UX улучшения для формы логина
+        document.addEventListener('DOMContentLoaded', function() {
+            const loginForm = document.getElementById('loginForm');
+            const loginBtn = document.getElementById('loginBtn');
+            const btnText = loginBtn.querySelector('.btn-text');
+            const spinner = loginBtn.querySelector('.spinner-border');
+            
+            // Loading состояние при отправке формы
+            loginForm.addEventListener('submit', function() {
+                loginBtn.disabled = true;
+                btnText.textContent = '🔄 Logging in...';
+                spinner.classList.remove('d-none');
+            });
+            
+            // Автофокус на поле username
+            document.getElementById('username').focus();
+            
+            // Enter для перехода между полями
+            document.getElementById('username').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    document.getElementById('password').focus();
+                }
+            });
+            
+            // Показать/скрыть пароль при двойном клике
+            const passwordField = document.getElementById('password');
+            passwordField.addEventListener('dblclick', function() {
+                if (this.type === 'password') {
+                    this.type = 'text';
+                    setTimeout(() => this.type = 'password', 1000);
+                }
+            });
+        });
+    </script>
 </body>
 
 </html>
