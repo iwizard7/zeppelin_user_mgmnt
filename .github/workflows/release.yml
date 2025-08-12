@@ -38,14 +38,72 @@ jobs:
           --exclude='logs' \
           .
     
-    - name: Generate changelog
+    - name: Generate smart changelog
       id: changelog
       run: |
-        # Простой changelog из коммитов
         echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
-        echo "## Changes in ${{ github.ref_name }}" >> $GITHUB_OUTPUT
+        echo "## 🚀 Release ${{ github.ref_name }}" >> $GITHUB_OUTPUT
         echo "" >> $GITHUB_OUTPUT
-        git log --pretty=format:"- %s" $(git describe --tags --abbrev=0 HEAD^)..HEAD >> $GITHUB_OUTPUT 2>/dev/null || echo "- Initial release" >> $GITHUB_OUTPUT
+        echo "### 📅 Release Date: $(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
+        echo "" >> $GITHUB_OUTPUT
+        
+        # Получаем коммиты с последнего тега
+        if git describe --tags --abbrev=0 HEAD^ >/dev/null 2>&1; then
+          COMMITS=$(git log $(git describe --tags --abbrev=0 HEAD^)..HEAD --oneline --no-merges)
+        else
+          COMMITS=$(git log --oneline --no-merges)
+        fi
+        
+        # Категоризируем коммиты
+        FEATURES=$(echo "$COMMITS" | grep -E "^[a-f0-9]+ (feat|feature):" || true)
+        FIXES=$(echo "$COMMITS" | grep -E "^[a-f0-9]+ (fix|bugfix):" || true)
+        STYLES=$(echo "$COMMITS" | grep -E "^[a-f0-9]+ (style|ui|ux):" || true)
+        DOCS=$(echo "$COMMITS" | grep -E "^[a-f0-9]+ (docs|doc):" || true)
+        CI=$(echo "$COMMITS" | grep -E "^[a-f0-9]+ (ci|build):" || true)
+        OTHERS=$(echo "$COMMITS" | grep -vE "^[a-f0-9]+ (feat|feature|fix|bugfix|style|ui|ux|docs|doc|ci|build):" || true)
+        
+        # Добавляем категории
+        if [ -n "$FEATURES" ]; then
+          echo "### ✨ New Features" >> $GITHUB_OUTPUT
+          echo "$FEATURES" | sed 's/^[a-f0-9]* /- /' | sed 's/^- [^:]*: /- /' >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+        fi
+        
+        if [ -n "$FIXES" ]; then
+          echo "### 🐛 Bug Fixes" >> $GITHUB_OUTPUT
+          echo "$FIXES" | sed 's/^[a-f0-9]* /- /' | sed 's/^- [^:]*: /- /' >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+        fi
+        
+        if [ -n "$STYLES" ]; then
+          echo "### 🎨 UI/UX Improvements" >> $GITHUB_OUTPUT
+          echo "$STYLES" | sed 's/^[a-f0-9]* /- /' | sed 's/^- [^:]*: /- /' >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+        fi
+        
+        if [ -n "$DOCS" ]; then
+          echo "### 📚 Documentation" >> $GITHUB_OUTPUT
+          echo "$DOCS" | sed 's/^[a-f0-9]* /- /' | sed 's/^- [^:]*: /- /' >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+        fi
+        
+        if [ -n "$CI" ]; then
+          echo "### 🔧 CI/CD & Build" >> $GITHUB_OUTPUT
+          echo "$CI" | sed 's/^[a-f0-9]* /- /' | sed 's/^- [^:]*: /- /' >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+        fi
+        
+        if [ -n "$OTHERS" ]; then
+          echo "### 📦 Other Changes" >> $GITHUB_OUTPUT
+          echo "$OTHERS" | sed 's/^[a-f0-9]* /- /' >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+        fi
+        
+        # Добавляем статистику
+        COMMIT_COUNT=$(echo "$COMMITS" | wc -l)
+        echo "### 📊 Statistics" >> $GITHUB_OUTPUT
+        echo "- **Commits**: $COMMIT_COUNT" >> $GITHUB_OUTPUT
+        echo "- **Release Date**: $(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
         echo "" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
     
