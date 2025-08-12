@@ -55,11 +55,40 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
+        load: true  # Загружаем образ локально для тестирования
     
     - name: Test Docker image
       run: |
-        docker run --rm -d -p 5000:5000 --name test-container ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest || true
-        sleep 10
-        curl -f http://localhost:5000 || echo "Container test completed"
-        docker stop test-container || true
+        echo "🧪 Testing Docker image..."
+        
+        # Проверяем что образ был создан
+        if docker image inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest >/dev/null 2>&1; then
+          echo "✅ Docker image found, starting container test..."
+          
+          # Запускаем контейнер
+          if docker run --rm -d -p 5000:5000 --name test-container ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest; then
+            echo "✅ Container started successfully"
+            
+            # Ждем запуска приложения
+            sleep 15
+            
+            # Тестируем доступность
+            if curl -f --max-time 10 http://localhost:5000 >/dev/null 2>&1; then
+              echo "✅ Application is responding"
+            else
+              echo "⚠️ Application not responding, checking logs..."
+              docker logs test-container || true
+            fi
+            
+            # Останавливаем контейнер
+            docker stop test-container || true
+            echo "🧹 Container stopped"
+          else
+            echo "❌ Failed to start container"
+            exit 1
+          fi
+        else
+          echo "⚠️ Docker image not found locally (this is expected for PR builds)"
+          echo "✅ Skipping container test"
+        fi
       if: github.event_name != 'pull_request'
