@@ -27,7 +27,7 @@
 :root {
     --bg-color: #ffffff;
     --bg-secondary: #f8f9fa;
-    --text-color: #212529;
+    --text-color: #000000;
     --text-muted: #6c757d;
     --border-color: #dee2e6;
     --card-bg: #ffffff;
@@ -44,7 +44,7 @@
     --btn-secondary-bg: #6c757d;
     --alert-info-bg: #d1ecf1;
     --alert-info-border: #bee5eb;
-    --alert-info-text: #0c5460;
+    --alert-info-text: #000000;
     --table-hover-bg: #f8f9fa;
 }
 
@@ -105,7 +105,7 @@ body {
 .form-select {
     background-color: var(--input-bg);
     border-color: var(--input-border);
-    color: var(--text-color);
+    color: var(--text-color) !important;
 }
 
 .form-control:focus,
@@ -261,6 +261,53 @@ footer a {
 .form-row .btn {
     min-width: 120px;
     white-space: nowrap;
+}
+
+/* Принудительные стили для светлой темы - черный текст */
+:root {
+    color: #000000 !important;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    color: #000000 !important;
+}
+
+p, span, div, label, small {
+    color: #000000 !important;
+}
+
+.card-body,
+.card-header,
+.card-title {
+    color: #000000 !important;
+}
+
+.table,
+.table td,
+.table th {
+    color: #000000 !important;
+}
+
+.table-light th {
+    color: #000000 !important;
+}
+
+.form-label,
+.form-text {
+    color: #000000 !important;
+}
+
+.form-control,
+.form-select {
+    color: #000000 !important;
+}
+
+.form-control::placeholder {
+    color: #6c757d !important;
+}
+
+.text-center {
+    color: #000000 !important;
 }
 
 /* Дополнительные стили для темной темы - принудительно белый текст */
