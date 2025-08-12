@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask_socketio import SocketIO, emit, disconnect
 import os
 import time
 import logging
@@ -8,12 +9,17 @@ from functools import wraps
 import subprocess
 import platform
 import uuid
+import threading
+import json
 
 app = Flask(__name__)
 
 # Настройка секретного ключа (для продакшена используйте переменную окружения)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production-' + str(uuid.uuid4()))
 app.permanent_session_lifetime = timedelta(hours=8)  # Сессия истекает через 8 часов
+
+# Инициализация SocketIO
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 shiro_ini_path = 'shiro.ini'
 
 # Защищенные пользователи, которых нельзя удалять или изменять
@@ -1183,9 +1189,11 @@ def start_zeppelin():
     if success:
         flash(f'Сервис Zeppelin: {message}', 'success')
         log_user_action('START_ZEPPELIN_SUCCESS', current_user, message)
+        broadcast_status_change('start', current_user, message)
     else:
         flash(f'Ошибка запуска Zeppelin: {message}', 'error')
         log_user_action('START_ZEPPELIN_FAILED', current_user, message)
+        broadcast_status_change('start_failed', current_user, message)
     
     return redirect(url_for('dashboard'))
 
@@ -1207,9 +1215,11 @@ def stop_zeppelin():
     if success:
         flash(f'Сервис Zeppelin: {message}', 'success')
         log_user_action('STOP_ZEPPELIN_SUCCESS', current_user, message)
+        broadcast_status_change('stop', current_user, message)
     else:
         flash(f'Ошибка остановки Zeppelin: {message}', 'error')
         log_user_action('STOP_ZEPPELIN_FAILED', current_user, message)
+        broadcast_status_change('stop_failed', current_user, message)
     
     return redirect(url_for('dashboard'))
 
@@ -1231,15 +1241,98 @@ def restart():
     if success:
         flash(f'Сервис Zeppelin: {message}', 'success')
         log_user_action('RESTART_ZEPPELIN_SUCCESS', current_user, message)
+        broadcast_status_change('restart', current_user, message)
     else:
         flash(f'Ошибка перезапуска Zeppelin: {message}', 'error')
         log_user_action('RESTART_ZEPPELIN_FAILED', current_user, message)
+        broadcast_status_change('restart_failed', current_user, message)
     
     return redirect(url_for('dashboard'))
 
+
+# WebSocket события
+@socketio.on('connect')
+def handle_connect():
+    """Обработка подключения клиента"""
+    if 'username' not in session:
+        disconnect()
+        return False
+    
+    logger.info(f"WebSocket подключение: {session['username']} ({request.remote_addr})")
+    emit('connected', {'message': f'Добро пожаловать, {session["username"]}!'})
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """Обработка отключения клиента"""
+    if 'username' in session:
+        logger.info(f"WebSocket отключение: {session['username']}")
+
+@socketio.on('request_status_update')
+def handle_status_request():
+    """Обработка запроса обновления статуса"""
+    if 'username' not in session:
+        return
+    
+    try:
+        status = check_zeppelin_status()
+        emit('status_update', {
+            'status': status,
+            'timestamp': datetime.now().isoformat(),
+            'user': session['username']
+        })
+    except Exception as e:
+        logger.error(f"Ошибка при получении статуса для WebSocket: {e}")
+        emit('error', {'message': 'Ошибка при получении статуса'})
+
+def broadcast_status_change(action, user, details=None):
+    """Рассылка изменений статуса всем подключенным клиентам"""
+    try:
+        status = check_zeppelin_status()
+        socketio.emit('status_change', {
+            'action': action,
+            'user': user,
+            'details': details,
+            'status': status,
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        logger.error(f"Ошибка при рассылке статуса: {e}")
+
+def broadcast_user_change(action, username, user_data=None):
+    """Рассылка изменений пользователей всем подключенным клиентам"""
+    try:
+        socketio.emit('user_change', {
+            'action': action,
+            'username': username,
+            'user_data': user_data,
+            'timestamp': datetime.now().isoformat(),
+            'total_users': len(users)
+        })
+    except Exception as e:
+        logger.error(f"Ошибка при рассылке изменений пользователей: {e}")
+
+# Автоматическое обновление статуса каждые 30 секунд
+def auto_status_broadcast():
+    """Автоматическая рассылка статуса каждые 30 секунд"""
+    while True:
+        try:
+            time.sleep(30)
+            # Используем функцию check_zeppelin_status
+            with app.app_context():
+                status = check_zeppelin_status()
+                socketio.emit('auto_status_update', {
+                    'status': status,
+                    'timestamp': datetime.now().isoformat()
+                })
+        except Exception as e:
+            logger.error(f"Ошибка автоматического обновления статуса: {e}")
+
+# Запускаем фоновый поток для автообновлений
+status_thread = threading.Thread(target=auto_status_broadcast, daemon=True)
+status_thread.start()
 
 if __name__ == '__main__':
     """
     Runs the Flask application.
     """
-    app.run(host='0.0.0.0', port=5003, debug=False)
+    socketio.run(app, host='0.0.0.0', port=5003, debug=False)
