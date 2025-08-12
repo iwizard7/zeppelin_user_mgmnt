@@ -39,7 +39,7 @@ CURRENT_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.1.0")
 echo -e "${BLUE}📌 Текущая версия: ${CURRENT_VERSION}${NC}"
 
 # Создаем новую версию
-NEW_VERSION="v$(date +%Y.%m.%d)"
+NEW_VERSION="v$(date +%Y.%m.%d.%H%M)"
 echo -e "${BLUE}🆕 Новая версия: ${NEW_VERSION}${NC}"
 
 # Получаем коммиты с последнего тега
