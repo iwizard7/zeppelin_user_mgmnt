@@ -1,4 +1,8 @@
-[![Pylint](https://github.com/iwizard7/zeppelin_user_mgmnt/actions/workflows/pylint.yml/badge.svg)](https://github.com/iwizard7/zeppelin_user_mgmnt/actions/workflows/pylint.yml)
+![Tests](https://github.com/iwizard7/zeppelin_user_mgmnt/actions/workflows/tests.yml/badge.svg)
+![Pylint](https://github.com/iwizard7/zeppelin_user_mgmnt/actions/workflows/pylint.yml/badge.svg)
+![Security](https://github.com/iwizard7/zeppelin_user_mgmnt/actions/workflows/security.yml/badge.svg)
+![Docker](https://github.com/iwizard7/zeppelin_user_mgmnt/actions/workflows/docker.yml/badge.svg)
+![Code Quality](https://github.com/iwizard7/zeppelin_user_mgmnt/actions/workflows/code-quality.yml/badge.svg)
 
 # 🚀 Управление пользователями и мониторинг Zeppelin
 
