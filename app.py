@@ -7,9 +7,12 @@ from datetime import datetime, timedelta
 from functools import wraps
 import subprocess
 import platform
+import uuid
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key'
+
+# Настройка секретного ключа (для продакшена используйте переменную окружения)
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production-' + str(uuid.uuid4()))
 app.permanent_session_lifetime = timedelta(hours=8)  # Сессия истекает через 8 часов
 shiro_ini_path = 'shiro.ini'
 
