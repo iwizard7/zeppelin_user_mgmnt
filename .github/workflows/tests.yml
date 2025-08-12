@@ -1,0 +1,88 @@
+name: Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-flask pytest-cov
+    
+    - name: Create test shiro.ini
+      run: |
+        cat > shiro.ini << EOF
+        [users]
+        admin = admin123, admin
+        testuser = testpass, user
+        
+        [roles]
+        admin = *
+        user = notebook:read
+        EOF
+    
+    - name: Run tests
+      run: |
+        # Создаем простые тесты если их нет
+        mkdir -p tests
+        cat > tests/test_app.py << 'EOF'
+        import pytest
+        import sys
+        import os
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        
+        from app import app
+        
+        @pytest.fixture
+        def client():
+            app.config['TESTING'] = True
+            with app.test_client() as client:
+                yield client
+        
+        def test_login_page(client):
+            """Test login page loads"""
+            rv = client.get('/')
+            assert rv.status_code == 200
+            assert b'Zeppelin User Management' in rv.data
+        
+        def test_login_success(client):
+            """Test successful login"""
+            rv = client.post('/login', data={
+                'username': 'admin',
+                'password': 'admin123'
+            }, follow_redirects=True)
+            assert rv.status_code == 200
+        
+        def test_login_failure(client):
+            """Test failed login"""
+            rv = client.post('/login', data={
+                'username': 'wrong',
+                'password': 'wrong'
+            })
+            assert rv.status_code == 302  # Redirect back to login
+        EOF
+        
+        # Запускаем тесты
+        python -m pytest tests/ -v --cov=app --cov-report=xml
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false

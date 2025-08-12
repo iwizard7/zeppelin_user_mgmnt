@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Create distribution
+      run: |
+        # Создаем архив с исходным кодом
+        tar -czf zeppelin-user-management-${GITHUB_REF#refs/tags/}.tar.gz \
+          --exclude='.git*' \
+          --exclude='__pycache__' \
+          --exclude='*.pyc' \
+          --exclude='.venv' \
+          --exclude='logs' \
+          .
+    
+    - name: Generate changelog
+      id: changelog
+      run: |
+        # Простой changelog из коммитов
+        echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+        echo "## Changes in ${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        echo "" >> $GITHUB_OUTPUT
+        git log --pretty=format:"- %s" $(git describe --tags --abbrev=0 HEAD^)..HEAD >> $GITHUB_OUTPUT
+        echo "" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+    
+    - name: Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        body: |
+          # Zeppelin User Management ${{ github.ref }}
+          
+          ## 🚀 Features
+          - Modern web interface for Apache Zeppelin user management
+          - Real-time service monitoring and control
+          - Dark/Light theme support
+          - Advanced user search and filtering
+          - Cross-platform support (Linux/macOS)
+          
+          ## 📦 Installation
+          
+          ### Docker (Recommended)
+          ```bash
+          docker run -d -p 8080:5000 ghcr.io/iwizard7/zeppelin_user_mgmnt:${{ github.ref }}
+          ```
+          
+          ### Manual Installation
+          1. Download and extract the source code
+          2. Install dependencies: `pip install -r requirements.txt`
+          3. Run: `python app.py`
+          
+          ## 📋 Changelog
+          ${{ steps.changelog.outputs.CHANGELOG }}
+          
+          ## 🔗 Links
+          - [Documentation](https://github.com/iwizard7/zeppelin_user_mgmnt#readme)
+          - [Docker Image](https://ghcr.io/iwizard7/zeppelin_user_mgmnt)
+          - [Issues](https://github.com/iwizard7/zeppelin_user_mgmnt/issues)
+        draft: false
+        prerelease: false
+    
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./zeppelin-user-management-${{ github.ref }}.tar.gz
+        asset_name: zeppelin-user-management-${{ github.ref }}.tar.gz
+        asset_content_type: application/gzip

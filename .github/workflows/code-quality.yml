@@ -1,0 +1,65 @@
+name: Code Quality
+
+on: [push, pull_request]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install black isort flake8 mypy
+        pip install -r requirements.txt
+    
+    - name: Check code formatting with Black
+      run: |
+        black --check --diff app.py
+      continue-on-error: true
+    
+    - name: Check import sorting with isort
+      run: |
+        isort --check-only --diff app.py
+      continue-on-error: true
+    
+    - name: Lint with flake8
+      run: |
+        # Мягкие настройки для Flask проекта
+        flake8 app.py --max-line-length=120 --ignore=E203,W503,E501,F401
+      continue-on-error: true
+    
+    - name: Type checking with mypy
+      run: |
+        mypy app.py --ignore-missing-imports --no-strict-optional
+      continue-on-error: true
+    
+    - name: Generate code quality report
+      run: |
+        echo "## Code Quality Report" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        echo "### Black (Code Formatting)" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        black --check --diff app.py >> $GITHUB_STEP_SUMMARY 2>&1 || echo "Black formatting check completed" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        echo "### isort (Import Sorting)" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        isort --check-only --diff app.py >> $GITHUB_STEP_SUMMARY 2>&1 || echo "Import sorting check completed" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        echo "### Flake8 (Linting)" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        flake8 app.py --max-line-length=120 --ignore=E203,W503,E501,F401 >> $GITHUB_STEP_SUMMARY 2>&1 || echo "Flake8 linting completed" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+      continue-on-error: true

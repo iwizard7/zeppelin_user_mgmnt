@@ -1,0 +1,75 @@
+name: Dependency Update
+
+on:
+  schedule:
+    # Запускается каждый понедельник в 9:00 UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch: # Позволяет запускать вручную
+
+jobs:
+  update-dependencies:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install pip-tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install pip-tools
+    
+    - name: Update dependencies
+      run: |
+        # Создаем requirements.in если его нет
+        if [ ! -f requirements.in ]; then
+          cp requirements.txt requirements.in
+        fi
+        
+        # Обновляем зависимости
+        pip-compile --upgrade requirements.in
+        
+        # Проверяем есть ли изменения
+        if git diff --quiet requirements.txt; then
+          echo "No dependency updates available"
+          echo "HAS_UPDATES=false" >> $GITHUB_ENV
+        else
+          echo "Dependencies updated"
+          echo "HAS_UPDATES=true" >> $GITHUB_ENV
+        fi
+    
+    - name: Test updated dependencies
+      if: env.HAS_UPDATES == 'true'
+      run: |
+        pip install -r requirements.txt
+        python -c "import flask; print('Flask version:', flask.__version__)"
+        python -c "import app; print('App imports successfully')"
+    
+    - name: Create Pull Request
+      if: env.HAS_UPDATES == 'true'
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: 'chore: update dependencies'
+        title: 'chore: update dependencies'
+        body: |
+          ## Dependency Updates
+          
+          This PR updates the project dependencies to their latest versions.
+          
+          ### Changes
+          - Updated requirements.txt with latest package versions
+          
+          ### Testing
+          - [x] Dependencies install successfully
+          - [x] App imports without errors
+          
+          Please review and test before merging.
+        branch: dependency-updates
+        delete-branch: true
