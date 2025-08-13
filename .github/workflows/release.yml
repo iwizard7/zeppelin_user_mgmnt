@@ -29,13 +29,23 @@ jobs:
     
     - name: Create distribution
       run: |
-        # Создаем архив с исходным кодом
-        tar -czf zeppelin-user-management-${{ github.ref_name }}.tar.gz \
+        # Создаем временную директорию для архива
+        mkdir -p dist
+        
+        # Создаем архив с исходным кодом, исключая изменяющиеся файлы
+        tar -czf dist/zeppelin-user-management-${{ github.ref_name }}.tar.gz \
           --exclude='.git*' \
           --exclude='__pycache__' \
           --exclude='*.pyc' \
           --exclude='.venv' \
           --exclude='logs' \
+          --exclude='dist' \
+          --exclude='.pytest_cache' \
+          --exclude='*.log' \
+          --exclude='*.backup' \
+          --exclude='.app_pid' \
+          --warning=no-file-changed \
+          --warning=no-file-removed \
           .
     
     - name: Generate smart changelog
@@ -47,64 +57,74 @@ jobs:
         echo "### 📅 Release Date: $(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
         echo "" >> $GITHUB_OUTPUT
         
-        # Получаем коммиты с последнего тега
+        # Получаем коммиты с последнего тега (более безопасно)
         if git describe --tags --abbrev=0 HEAD^ >/dev/null 2>&1; then
-          COMMITS=$(git log $(git describe --tags --abbrev=0 HEAD^)..HEAD --oneline --no-merges)
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^)
+          COMMITS=$(git log ${PREV_TAG}..HEAD --oneline --no-merges)
         else
-          COMMITS=$(git log --oneline --no-merges)
+          # Если это первый тег, берем последние 10 коммитов
+          COMMITS=$(git log --oneline --no-merges -10)
         fi
         
-        # Категоризируем коммиты
-        FEATURES=$(echo "$COMMITS" | grep -E "^[a-f0-9]+ (feat|feature):" || true)
-        FIXES=$(echo "$COMMITS" | grep -E "^[a-f0-9]+ (fix|bugfix):" || true)
-        STYLES=$(echo "$COMMITS" | grep -E "^[a-f0-9]+ (style|ui|ux):" || true)
-        DOCS=$(echo "$COMMITS" | grep -E "^[a-f0-9]+ (docs|doc):" || true)
-        CI=$(echo "$COMMITS" | grep -E "^[a-f0-9]+ (ci|build):" || true)
-        OTHERS=$(echo "$COMMITS" | grep -vE "^[a-f0-9]+ (feat|feature|fix|bugfix|style|ui|ux|docs|doc|ci|build):" || true)
+        # Проверяем что коммиты найдены
+        if [ -z "$COMMITS" ]; then
+          echo "### 📦 Initial Release" >> $GITHUB_OUTPUT
+          echo "- First release of Zeppelin User Management" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+        else
         
-        # Добавляем категории
-        if [ -n "$FEATURES" ]; then
-          echo "### ✨ New Features" >> $GITHUB_OUTPUT
-          echo "$FEATURES" | sed 's/^[a-f0-9]* /- /' | sed 's/^- [^:]*: /- /' >> $GITHUB_OUTPUT
+          # Категоризируем коммиты
+          FEATURES=$(echo "$COMMITS" | grep -E "^[a-f0-9]+ (feat|feature):" || true)
+          FIXES=$(echo "$COMMITS" | grep -E "^[a-f0-9]+ (fix|bugfix):" || true)
+          STYLES=$(echo "$COMMITS" | grep -E "^[a-f0-9]+ (style|ui|ux):" || true)
+          DOCS=$(echo "$COMMITS" | grep -E "^[a-f0-9]+ (docs|doc):" || true)
+          CI=$(echo "$COMMITS" | grep -E "^[a-f0-9]+ (ci|build):" || true)
+          OTHERS=$(echo "$COMMITS" | grep -vE "^[a-f0-9]+ (feat|feature|fix|bugfix|style|ui|ux|docs|doc|ci|build):" || true)
+          
+          # Добавляем категории
+          if [ -n "$FEATURES" ]; then
+            echo "### ✨ New Features" >> $GITHUB_OUTPUT
+            echo "$FEATURES" | sed 's/^[a-f0-9]* /- /' | sed 's/^- [^:]*: /- /' >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+          fi
+          
+          if [ -n "$FIXES" ]; then
+            echo "### 🐛 Bug Fixes" >> $GITHUB_OUTPUT
+            echo "$FIXES" | sed 's/^[a-f0-9]* /- /' | sed 's/^- [^:]*: /- /' >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+          fi
+          
+          if [ -n "$STYLES" ]; then
+            echo "### 🎨 UI/UX Improvements" >> $GITHUB_OUTPUT
+            echo "$STYLES" | sed 's/^[a-f0-9]* /- /' | sed 's/^- [^:]*: /- /' >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+          fi
+          
+          if [ -n "$DOCS" ]; then
+            echo "### 📚 Documentation" >> $GITHUB_OUTPUT
+            echo "$DOCS" | sed 's/^[a-f0-9]* /- /' | sed 's/^- [^:]*: /- /' >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+          fi
+          
+          if [ -n "$CI" ]; then
+            echo "### 🔧 CI/CD & Build" >> $GITHUB_OUTPUT
+            echo "$CI" | sed 's/^[a-f0-9]* /- /' | sed 's/^- [^:]*: /- /' >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+          fi
+          
+          if [ -n "$OTHERS" ]; then
+            echo "### 📦 Other Changes" >> $GITHUB_OUTPUT
+            echo "$OTHERS" | sed 's/^[a-f0-9]* /- /' >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+          fi
+        
+          # Добавляем статистику
+          COMMIT_COUNT=$(echo "$COMMITS" | wc -l)
+          echo "### 📊 Statistics" >> $GITHUB_OUTPUT
+          echo "- **Commits**: $COMMIT_COUNT" >> $GITHUB_OUTPUT
+          echo "- **Release Date**: $(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
           echo "" >> $GITHUB_OUTPUT
         fi
-        
-        if [ -n "$FIXES" ]; then
-          echo "### 🐛 Bug Fixes" >> $GITHUB_OUTPUT
-          echo "$FIXES" | sed 's/^[a-f0-9]* /- /' | sed 's/^- [^:]*: /- /' >> $GITHUB_OUTPUT
-          echo "" >> $GITHUB_OUTPUT
-        fi
-        
-        if [ -n "$STYLES" ]; then
-          echo "### 🎨 UI/UX Improvements" >> $GITHUB_OUTPUT
-          echo "$STYLES" | sed 's/^[a-f0-9]* /- /' | sed 's/^- [^:]*: /- /' >> $GITHUB_OUTPUT
-          echo "" >> $GITHUB_OUTPUT
-        fi
-        
-        if [ -n "$DOCS" ]; then
-          echo "### 📚 Documentation" >> $GITHUB_OUTPUT
-          echo "$DOCS" | sed 's/^[a-f0-9]* /- /' | sed 's/^- [^:]*: /- /' >> $GITHUB_OUTPUT
-          echo "" >> $GITHUB_OUTPUT
-        fi
-        
-        if [ -n "$CI" ]; then
-          echo "### 🔧 CI/CD & Build" >> $GITHUB_OUTPUT
-          echo "$CI" | sed 's/^[a-f0-9]* /- /' | sed 's/^- [^:]*: /- /' >> $GITHUB_OUTPUT
-          echo "" >> $GITHUB_OUTPUT
-        fi
-        
-        if [ -n "$OTHERS" ]; then
-          echo "### 📦 Other Changes" >> $GITHUB_OUTPUT
-          echo "$OTHERS" | sed 's/^[a-f0-9]* /- /' >> $GITHUB_OUTPUT
-          echo "" >> $GITHUB_OUTPUT
-        fi
-        
-        # Добавляем статистику
-        COMMIT_COUNT=$(echo "$COMMITS" | wc -l)
-        echo "### 📊 Statistics" >> $GITHUB_OUTPUT
-        echo "- **Commits**: $COMMIT_COUNT" >> $GITHUB_OUTPUT
-        echo "- **Release Date**: $(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
-        echo "" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
     
     - name: Create Release
@@ -144,6 +164,6 @@ jobs:
           - [Docker Image](https://ghcr.io/iwizard7/zeppelin_user_mgmnt)
           - [Issues](https://github.com/iwizard7/zeppelin_user_mgmnt/issues)
         files: |
-          zeppelin-user-management-${{ github.ref_name }}.tar.gz
+          dist/zeppelin-user-management-${{ github.ref_name }}.tar.gz
         draft: false
         prerelease: false
