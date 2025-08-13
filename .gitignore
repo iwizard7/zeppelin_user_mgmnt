@@ -84,6 +84,7 @@ scripts/quick-commit.sh
 scripts/setup-git-hooks.sh
 scripts/*commit*.sh
 scripts/*git*.sh
+scripts/update-version.sh
 
 # Documentation (exclude all .md files except useful ones)
 *.md
