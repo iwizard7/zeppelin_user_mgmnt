@@ -76,8 +76,13 @@ docs/_build/
 *.key
 secrets.txt
 
-# Documentation (exclude all .md files except README)
+# Development tools and personal documentation
+.dev-tools/
+
+# Documentation (exclude all .md files except useful ones)
 *.md
-!Readme.MD
 !README.md
+!Readme.MD
 !readme.md
+!CHANGELOG.md
+!docs/*.md

@@ -359,9 +359,7 @@ zeppelin_user_mgmnt/
 │   └── favicon.svg                 # Кастомный favicon с ракетой
 ├── tests/                          # Автоматические тесты
 │   └── test_app.py                 # 9 тестов с полным покрытием
-├── scripts/                        # Скрипты автоматизации
-│   ├── auto-commit.sh              # Умные commit сообщения
-│   └── generate-changelog.sh       # Автогенерация changelog
+
 ├── .github/workflows/              # CI/CD Pipeline
 │   ├── tests.yml                   # Автоматическое тестирование
 │   ├── pylint.yml                  # Проверка качества кода
@@ -370,15 +368,9 @@ zeppelin_user_mgmnt/
 │   ├── code-quality.yml            # Комплексная проверка качества
 │   ├── dependency-update.yml       # Автообновление зависимостей
 │   └── release.yml                 # Автоматические релизы
-├── docs/                           # Документация
-│   ├── AUTOMATION_GUIDE.md         # Руководство по автоматизации
-│   ├── LIVE_UPDATES_GUIDE.md       # Руководство по WebSocket
-│   ├── UX_IMPROVEMENTS_SUMMARY.md  # Сводка UX улучшений
-│   ├── FINAL_RECOMMENDATIONS.md    # Финальные рекомендации
-│   ├── BUGFIX_REPORT.md            # Отчеты об исправлениях
+├── docs/                           # Документация (опционально)
 │   ├── APP_MANAGEMENT_GUIDE.md     # 🔧 Подробное руководство по управлению
-│   ├── QUICK_START.md              # ⚡ Быстрый старт
-│   └── NEW_FEATURES_SUMMARY.md     # 🆕 Сводка новых фич
+│   └── QUICK_START.md              # ⚡ Быстрый старт
 ├── logs/                           # Директория логов (создается автоматически)
 │   └── app.log                     # Основной лог файл с ротацией
 ├── .gitignore                      # Исключения для Git
