@@ -14,6 +14,17 @@ import json
 
 app = Flask(__name__)
 
+# Функция для получения версии приложения
+def get_app_version():
+    """Получает версию приложения из файла VERSION"""
+    try:
+        with open('VERSION', 'r', encoding='utf-8') as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        return '3.0.0'  # Fallback версия
+    except Exception:
+        return 'unknown'
+
 # Настройка секретного ключа (для продакшена используйте переменную окружения)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production-' + str(uuid.uuid4()))
 app.permanent_session_lifetime = timedelta(hours=8)  # Сессия истекает через 8 часов
@@ -21,6 +32,12 @@ app.permanent_session_lifetime = timedelta(hours=8)  # Сессия истека
 # Инициализация SocketIO
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 shiro_ini_path = 'shiro.ini'
+
+# Добавляем версию в контекст всех шаблонов
+@app.context_processor
+def inject_version():
+    """Добавляет версию приложения во все шаблоны"""
+    return {'app_version': get_app_version()}
 
 # Защищенные пользователи, которых нельзя удалять или изменять
 PROTECTED_USERS = {'admin'}
@@ -831,6 +848,17 @@ def restart_zeppelin():
     if not success:
         logger.error(f"Ошибка перезапуска Zeppelin: {message}")
     return success
+
+
+@app.route('/api/version')
+def api_version():
+    """API endpoint для получения версии приложения"""
+    from flask import jsonify
+    return jsonify({
+        'version': get_app_version(),
+        'name': 'Zeppelin User Management',
+        'description': 'Modern web interface for Apache Zeppelin user management'
+    })
 
 
 @app.route('/')

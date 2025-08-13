@@ -223,7 +223,7 @@
 
                 <span class="navbar-text me-3">
                     👤 {{ session.username }}
-                    <small class="text-muted">| Сессия активна</small>
+                    <small class="text-muted">| v{{ app_version }} | Сессия активна</small>
                     <span id="liveIndicator" class="badge bg-secondary ms-2">🔄 Подключение...</span>
                 </span>
                 <a class="nav-link" href="{{ url_for('logout') }}" onclick="sessionStorage.removeItem('welcomeShown')">

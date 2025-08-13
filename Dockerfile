@@ -1,6 +1,11 @@
 # Используем официальный образ Python
 FROM python:3.13-slim
 
+# Метаданные образа
+LABEL version="3.0.0"
+LABEL description="Zeppelin User Management - Modern web interface for Apache Zeppelin user management"
+LABEL maintainer="iwizard7"
+
 # Устанавливаем рабочую директорию внутри контейнера
 WORKDIR /app
 
