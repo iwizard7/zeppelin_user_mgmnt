@@ -79,6 +79,12 @@ secrets.txt
 # Development tools and personal documentation
 .dev-tools/
 
+# Development scripts that might accidentally end up in scripts/
+scripts/quick-commit.sh
+scripts/setup-git-hooks.sh
+scripts/*commit*.sh
+scripts/*git*.sh
+
 # Documentation (exclude all .md files except useful ones)
 *.md
 !README.md
